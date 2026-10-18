@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="0.2.5.0" name="Comm.NetConfigHelper.app" />
+
+  <!-- 与主程序（Comm.App.Wpf，asInvoker）相反：本进程**只**用于网卡写操作，必须由主程序用 runas 动词单次拉起
+       （规划 AD-08 / 12.5）。requireAdministrator 意味着双击本 EXE 也会弹 UAC——这是刻意的：
+       助手不允许在普通权限下"假装成功"，否则网卡写操作会静默失败（规划 4.8.3）。 -->
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <requestedExecutionLevel level="requireAdministrator" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+
+  <!-- 支持 Windows 10 / Windows 11（.NET 8 不支持 Win7/8.1，只声明真正支持的版本） -->
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" />
+    </application>
+  </compatibility>
+
+  <!-- 助手自身没有界面，但 self-test 报告与日志会带路径/尺寸信息，仍按主程序的 DPI 与长路径约定声明，
+       避免将来加最简提示窗口时忘记（规划 16.3.6 的 DPI 检查项）。 -->
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+      <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
+    </windowsSettings>
+  </application>
+</assembly>

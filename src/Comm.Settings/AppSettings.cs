@@ -95,6 +95,88 @@ public enum ConnectionKindHint
     Tcp
 }
 
+/// <summary>
+/// 网卡配置方案（M3a，规划 4.8.4 / 7.6）。
+/// 只保存用户意图，不保存“当前生效值”；实际生效值以提权助手回读结果为准。
+/// </summary>
+public sealed record NetworkProfile
+{
+    public string Id { get; init; } = Guid.NewGuid().ToString("N")[..8];
+    public string Name { get; init; } = string.Empty;
+
+    /// <summary>目标网卡匹配方式：适配器 Id（GUID）优先，其次名称包含匹配。</summary>
+    public string AdapterMatcher { get; init; } = string.Empty;
+
+    public bool DhcpEnabled { get; init; }
+    public string? Ipv4 { get; init; }
+    public int PrefixLength { get; init; } = 24;
+    public string? Gateway { get; init; }
+    public string? Dns1 { get; init; }
+    public string? Dns2 { get; init; }
+    public bool ApplyDns { get; init; }
+    public string? Notes { get; init; }
+    public DateTimeOffset UpdatedAt { get; init; } = DateTimeOffset.Now;
+
+    public string DisplayText => string.IsNullOrWhiteSpace(Name)
+        ? (DhcpEnabled ? $"DHCP（{AdapterMatcher}）" : $"{Ipv4}/{PrefixLength}（{AdapterMatcher}）")
+        : Name;
+}
+
+/// <summary>网卡配置行为设置（M3a，规划 4.8.3、15.8）。</summary>
+public sealed record NetConfigSettings
+{
+    /// <summary>“安全恢复倒计时”默认关闭；勾选后默认 60 秒（D-6）。</summary>
+    public bool SafetyRollbackEnabled { get; init; }
+
+    public int SafetyRollbackSeconds { get; init; } = 60;
+
+    /// <summary>应用前是否检查目标 IP 是否已被占用（可选 ARP 探测，默认关）。</summary>
+    public bool ProbeAddressConflict { get; init; }
+
+    /// <summary>提权助手空闲退出时间（分钟，规划 12.5 默认 5）。</summary>
+    public int HelperIdleExitMinutes { get; init; } = 5;
+}
+
+/// <summary>插件宿主设置（M3b，规划 15.11）：被自动禁用的插件在用户手动启用前保持禁用。</summary>
+public sealed record PluginSettings
+{
+    /// <summary>被禁用（或自动禁用）的插件 Id。</summary>
+    public IReadOnlyList<string> DisabledPlugins { get; init; } = Array.Empty<string>();
+
+    /// <summary>每个插件的连续失败次数（规划 15.11：达到 3 次自动禁用，且跨次启动累计）。</summary>
+    public IReadOnlyDictionary<string, int> FailureCounts { get; init; } = new Dictionary<string, int>();
+
+    public bool LoadOnStartup { get; init; } = true;
+}
+
+/// <summary>可拆分窗口的布局（M3b，规划 21.2.2）：每个会话独立保存位置与尺寸。</summary>
+public sealed record SessionWindowLayout
+{
+    public string SessionId { get; init; } = string.Empty;
+    public double Left { get; init; } = double.NaN;
+    public double Top { get; init; } = double.NaN;
+    public double Width { get; init; } = 1180;
+    public double Height { get; init; } = 780;
+    public bool Maximized { get; init; }
+    public string? MonitorDeviceName { get; init; }
+}
+
+/// <summary>会话与工作区设置（M3b）。</summary>
+public sealed record SessionSettings
+{
+    /// <summary>并行会话上限（规划 4.1.3，默认 8）。</summary>
+    public int MaxSessions { get; init; } = 8;
+
+    /// <summary>上次打开的工作区/工程文件（规划 4.12）。</summary>
+    public string? LastWorkspaceFile { get; init; }
+
+    /// <summary>启动时自动重新打开上次的工作区文件。</summary>
+    public bool ReopenLastWorkspace { get; init; }
+
+    /// <summary>已拆分为独立窗口的会话及其窗口布局。</summary>
+    public IReadOnlyList<SessionWindowLayout> WindowLayouts { get; init; } = Array.Empty<SessionWindowLayout>();
+}
+
 /// <summary>常用设备目标：把“某一台设备”的连接信息与 Unit ID 存下来复用（规划 7.2、4.12）。</summary>
 public sealed record DeviceTarget
 {
@@ -235,6 +317,18 @@ public sealed record AppSettings
 
     /// <summary>报文模板（规划 4.5.4）。</summary>
     public IReadOnlyList<FrameTemplate> Templates { get; init; } = Array.Empty<FrameTemplate>();
+
+    /// <summary>网卡配置方案（M3a，规划 4.8.4）。</summary>
+    public IReadOnlyList<NetworkProfile> NetworkProfiles { get; init; } = Array.Empty<NetworkProfile>();
+
+    /// <summary>网卡配置行为设置（M3a）。</summary>
+    public NetConfigSettings NetConfig { get; init; } = new();
+
+    /// <summary>插件宿主设置（M3b，规划 15.11）。</summary>
+    public PluginSettings Plugins { get; init; } = new();
+
+    /// <summary>会话与工作区设置（M3b，规划 21.2）。</summary>
+    public SessionSettings Sessions { get; init; } = new();
 }
 
 /// <summary>

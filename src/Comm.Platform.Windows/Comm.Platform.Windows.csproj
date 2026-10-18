@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Comm.Platform.Windows</RootNamespace>
+    <AssemblyName>Comm.Platform.Windows</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Comm.Core\Comm.Core.csproj" />
+    <!-- 复用 SubnetCalculator（IPv4 掩码/网络地址计算），避免各处自行做位运算（见规划 14.4 地址换算集中管理） -->
+    <ProjectReference Include="..\Comm.Network\Comm.Network.csproj" />
+  </ItemGroup>
+</Project>

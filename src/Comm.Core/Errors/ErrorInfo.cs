@@ -77,10 +77,26 @@ public static class ErrorCodes
     public const string ValidationNetworkRange = "VAL-4007";
     /// <summary>参数扫描需要可重配的串口会话（R-11）。</summary>
     public const string ValidationParameterScanNotSerial = "VAL-4008";
+    /// <summary>网卡配置输入非法（IP/掩码/网关格式、掩码不连续、网络地址/广播地址、网关不同网段、地址重复）。</summary>
+    public const string ValidationNetworkConfig = "VAL-4009";
 
     // 平台
     public const string PlatformPermission = "PLT-5001";
     public const string PlatformNotSupported = "PLT-5002";
+    /// <summary>网卡配置：找不到指定的网络适配器（可能已被拔出或禁用）。</summary>
+    public const string PlatformAdapterNotFound = "PLT-5003";
+    /// <summary>网卡配置：应用失败（IP Helper / CIM / netsh 均未成功）。</summary>
+    public const string PlatformNetConfigApplyFailed = "PLT-5004";
+    /// <summary>网卡配置：应用后回读校验与预期不一致（已触发自动回滚，见规划 15.8）。</summary>
+    public const string PlatformNetConfigReadbackMismatch = "PLT-5005";
+    /// <summary>网卡配置：回滚到快照失败——必须显式提示用户手工恢复。</summary>
+    public const string PlatformNetConfigRollbackFailed = "PLT-5006";
+    /// <summary>提权助手不可用（未找到、UAC 被拒绝、管道连接失败）。</summary>
+    public const string PlatformHelperUnavailable = "PLT-5007";
+    /// <summary>提权助手通信协议错误（响应无法解析、命令不被接受、超时）。</summary>
+    public const string PlatformHelperProtocol = "PLT-5008";
+    /// <summary>网卡配置：存在未确认的回滚倒计时，或存在未决快照（程序上次异常退出）。</summary>
+    public const string PlatformNetConfigPendingRollback = "PLT-5009";
 
     // 存储
     public const string StorageWriteFailed = "STO-6001";
@@ -90,6 +106,12 @@ public static class ErrorCodes
     // 插件
     public const string PluginLoadFailed = "PLG-7001";
     public const string PluginCallFailed = "PLG-7002";
+    /// <summary>插件清单声明的主程序版本范围与当前版本不兼容。</summary>
+    public const string PluginIncompatible = "PLG-7003";
+    /// <summary>插件清单非法（缺少 Id/Name、清单无法解析、入口类型缺失）。</summary>
+    public const string PluginManifestInvalid = "PLG-7004";
+    /// <summary>插件连续失败已自动禁用（规划 15.11）。</summary>
+    public const string PluginAutoDisabled = "PLG-7005";
 
     // 内部
     public const string InternalError = "INT-9001";

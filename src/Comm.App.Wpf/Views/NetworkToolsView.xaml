@@ -3,91 +3,212 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Grid Margin="12">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="380" />
+            <ColumnDefinition Width="430" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
+        <!-- 左列：子网计算 + 网卡配置（整体可滚动，B-01：900×480 下所有内容都能滚到） -->
         <Border Grid.Column="0" BorderBrush="{StaticResource BorderBrushLight}" BorderThickness="1" CornerRadius="3"
                 Padding="12" Margin="0,0,12,0" Background="{StaticResource PanelBrush}">
             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel>
-                <TextBlock Text="IPv4 子网计算" Style="{StaticResource SectionHeader}" />
+                <StackPanel>
+                    <TextBlock Text="IPv4 子网计算" Style="{StaticResource SectionHeader}" />
 
-                <TextBlock Text="IP 地址" Style="{StaticResource FieldLabel}" />
-                <TextBox Text="{Binding IpText}" />
+                    <TextBlock Text="IP 地址" Style="{StaticResource FieldLabel}" />
+                    <TextBox Text="{Binding IpText}" />
 
-                <TextBlock Text="子网掩码或前缀（如 255.255.255.0 或 24 或 /24）" Style="{StaticResource FieldLabel}" />
-                <TextBox Text="{Binding MaskText}" />
+                    <TextBlock Text="子网掩码或前缀（如 255.255.255.0 或 24 或 /24）" Style="{StaticResource FieldLabel}" />
+                    <TextBox Text="{Binding MaskText}" />
 
-                <TextBlock Text="第二个 IP（判断是否同网段，可空）" Style="{StaticResource FieldLabel}" />
-                <TextBox Text="{Binding SecondIpText}" />
+                    <TextBlock Text="第二个 IP（判断是否同网段，可空）" Style="{StaticResource FieldLabel}" />
+                    <TextBox Text="{Binding SecondIpText}" />
 
-                <StackPanel Orientation="Horizontal">
-                    <Button Content="计算" Command="{Binding ComputeCommand}" FontWeight="SemiBold" />
-                    <Button Content="用本机地址" Command="{Binding UseLocalRangeCommand}" />
-                    <Button Content="复制 CIDR" Command="{Binding CopyCidrCommand}" />
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="计算" Command="{Binding ComputeCommand}" FontWeight="SemiBold" />
+                        <Button Content="用本机地址" Command="{Binding UseLocalRangeCommand}" />
+                        <Button Content="复制 CIDR" Command="{Binding CopyCidrCommand}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                        <Button Content="复制主机范围" Command="{Binding CopyHostRangeCommand}" />
+                        <Button Content="复制全部结果" Command="{Binding CopyDetailsCommand}" />
+                    </StackPanel>
+
+                    <TextBlock Text="结果" Style="{StaticResource SectionHeader}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="110" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="CIDR" />
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding CidrText}" FontWeight="SemiBold" />
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="网络地址" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding NetworkText}" />
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="广播地址" />
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding BroadcastText}" />
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="可用主机范围" />
+                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding HostRangeText}" />
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="通配符掩码" />
+                        <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding WildcardText}" />
+                        <TextBlock Grid.Row="5" Grid.Column="0" Text="地址数量" />
+                        <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding TotalText}" TextWrapping="Wrap" />
+                        <TextBlock Grid.Row="6" Grid.Column="0" Text="地址类型" />
+                        <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding KindText}" />
+                        <TextBlock Grid.Row="7" Grid.Column="0" Text="IP 二进制" />
+                        <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding BinaryText}" IsReadOnly="True"
+                                 FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="Wrap"
+                                 HorizontalScrollBarVisibility="Auto" ToolTip="{Binding BinaryText}"
+                                 BorderThickness="0" Background="Transparent" Padding="0" Margin="0,0,0,2" />
+                        <TextBlock Grid.Row="8" Grid.Column="0" Text="掩码二进制" />
+                        <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding MaskBinaryText}" IsReadOnly="True"
+                                 FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="Wrap"
+                                 HorizontalScrollBarVisibility="Auto" ToolTip="{Binding MaskBinaryText}"
+                                 BorderThickness="0" Background="Transparent" Padding="0" Margin="0,0,0,2" />
+                        <TextBlock Grid.Row="9" Grid.Column="0" Text="同网段判断" />
+                        <TextBlock Grid.Row="9" Grid.Column="1" Text="{Binding SameSubnetText}" TextWrapping="Wrap" />
+                        <TextBlock Grid.Row="10" Grid.Column="0" Text="扫描预计耗时" />
+                        <TextBlock Grid.Row="10" Grid.Column="1" Text="{Binding EstimatedScanText}" />
+                    </Grid>
+
+                    <!-- ============================ 网卡配置（R-07 / R-13） ============================ -->
+                    <Expander Header="本机网卡配置（修改 IP / 掩码 / 网关 / 辅助 IP）" IsExpanded="True" Margin="0,12,0,0">
+                        <StackPanel>
+                            <TextBlock TextWrapping="Wrap" Foreground="#1B5E9B" Margin="0,4,0,6"
+                                       Text="主程序始终以普通用户运行；所有写操作都交给独立的提权助手（Comm.NetConfigHelper），应用时会弹出 UAC。修改前会自动保存配置快照，可一键恢复。" />
+
+                            <TextBlock Text="{Binding HelperStatusText}" TextWrapping="Wrap" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding HelperPathText}" TextWrapping="Wrap" Foreground="#4A4A55" FontSize="11"
+                                       FontFamily="{StaticResource MonoFont}" />
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,6">
+                                <Button Content="刷新网卡与助手状态" Command="{Binding RefreshConfiguredAdaptersCommand}" />
+                                <Button Content="刷新助手状态" Command="{Binding RefreshHelperStatusCommand}" />
+                            </StackPanel>
+
+                            <TextBlock Text="可配置网卡（只读枚举）" Style="{StaticResource FieldLabel}" />
+                            <DataGrid ItemsSource="{Binding ConfigAdapters}" SelectedItem="{Binding SelectedConfigAdapter}"
+                                      Height="130" AutoGenerateColumns="False" IsReadOnly="True">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="接口" Binding="{Binding Name}" Width="120" />
+                                    <DataGridTextColumn Header="状态" Binding="{Binding IsUp}" Width="50" />
+                                    <DataGridTextColumn Header="DHCP" Binding="{Binding DhcpEnabled}" Width="50" />
+                                    <DataGridTextColumn Header="IPv4" Binding="{Binding Ipv4.Count}" Width="50" />
+                                    <DataGridTextColumn Header="描述" Binding="{Binding Description}" Width="200" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <TextBlock Text="{Binding AdapterSummaryText}" TextWrapping="Wrap" Margin="0,6,0,0"
+                                       FontFamily="{StaticResource MonoFont}" FontSize="11" />
+
+                            <CheckBox Content="使用 DHCP 自动获取地址" IsChecked="{Binding UseDhcp}" Margin="0,8,0,0" />
+
+                            <TextBlock Text="IPv4 地址（静态时必填）" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding ConfigIpv4Text}" IsEnabled="{Binding UseDhcp, Converter={StaticResource InverseBool}}" />
+
+                            <TextBlock Text="掩码或前缀（24 / /24 / 255.255.255.0）" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding ConfigPrefixText}" IsEnabled="{Binding UseDhcp, Converter={StaticResource InverseBool}}" />
+
+                            <TextBlock Text="默认网关（留空 = 不修改网关）" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding ConfigGatewayText}" IsEnabled="{Binding UseDhcp, Converter={StaticResource InverseBool}}" />
+
+                            <TextBlock Text="首选 DNS" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding ConfigDns1Text}" />
+                            <TextBlock Text="备用 DNS" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding ConfigDns2Text}" />
+                            <CheckBox Content="同时应用 DNS（DNS 变更需单独确认）" IsChecked="{Binding ApplyDns}" />
+
+                            <CheckBox Content="替换网卡上现有地址（取消勾选 = 保留原地址，仅叠加）"
+                                      IsChecked="{Binding ReplaceExistingAddresses}" Margin="0,6,0,0"
+                                      IsEnabled="{Binding UseDhcp, Converter={StaticResource InverseBool}}" />
+
+                            <CheckBox Content="启用安全恢复倒计时（未点“保留”则自动恢复）"
+                                      IsChecked="{Binding AutoRollbackEnabled}" Margin="0,6,0,0" />
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="倒计时秒数" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                <TextBox Text="{Binding AutoRollbackSeconds}" Width="70" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <Button Content="校验并预览" Command="{Binding ValidateConfigCommand}" FontWeight="SemiBold" />
+                                <Button Content="应用配置" Command="{Binding ApplyConfigCommand}" IsEnabled="{Binding CanApply}" />
+                                <Button Content="保留此配置" Command="{Binding ConfirmKeepCommand}" IsEnabled="{Binding IsRollbackArmed}" />
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding ValidationText}" TextWrapping="Wrap" Margin="0,6,0,0" Foreground="#1B5E9B" />
+                            <TextBlock Text="{Binding RollbackText}" TextWrapping="Wrap" Margin="0,6,0,0" Foreground="#B26500" />
+
+                            <TextBlock Text="网卡现有地址（可移除辅助 IP）" Style="{StaticResource FieldLabel}" />
+                            <ListBox ItemsSource="{Binding SelectedAddresses}" SelectedItem="{Binding SelectedAddress}" Height="70">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding DisplayText}" />
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="新地址" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                <TextBox Text="{Binding AuxAddressText}" Width="130" />
+                                <TextBlock Text="前缀" VerticalAlignment="Center" Margin="6,0,6,0" />
+                                <TextBox Text="{Binding AuxPrefixText}" Width="50" />
+                                <Button Content="叠加" Command="{Binding AddAuxiliaryAddressCommand}" />
+                                <Button Content="移除选中地址" Command="{Binding RemoveAuxiliaryAddressCommand}" />
+                            </StackPanel>
+
+                            <TextBlock Text="配置快照（修改前自动保存，可一键恢复）" Style="{StaticResource FieldLabel}" />
+                            <ListBox ItemsSource="{Binding Snapshots}" SelectedItem="{Binding SelectedSnapshot}" Height="90">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                                   Text="{Binding CreatedAt, StringFormat='{}{0:MM-dd HH:mm:ss}'}" />
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="刷新快照" Command="{Binding RefreshSnapshotsCommand}" />
+                                <Button Content="恢复选中快照" Command="{Binding RestoreSnapshotCommand}" FontWeight="SemiBold" />
+                            </StackPanel>
+
+                            <TextBlock Text="网络配置方案（规划 4.8.4）" Style="{StaticResource FieldLabel}" />
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="方案名称" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                <TextBox Text="{Binding ProfileNameText}" Width="140" />
+                                <Button Content="保存为方案" Command="{Binding SaveProfileCommand}" />
+                            </StackPanel>
+                            <ListBox ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile}" Height="70">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding DisplayText}" TextTrimming="CharacterEllipsis" />
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="载入到编辑区" Command="{Binding LoadProfileCommand}" />
+                                <Button Content="删除方案" Command="{Binding DeleteProfileCommand}" />
+                            </StackPanel>
+
+                            <TextBlock TextWrapping="Wrap" Foreground="#4A4A55" FontSize="11" Margin="0,8,0,0"
+                                       Text="说明：修改网卡前请确认已获得授权；本工具不会删除你原有的多 IP 配置（除非你明确勾选“替换现有地址”），也不会要求关闭 UAC 或杀毒软件。辅助 IP 可随时一键移除。" />
+                        </StackPanel>
+                    </Expander>
+
+                    <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="#1B5E9B" Margin="0,10,0,0" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                    <Button Content="复制主机范围" Command="{Binding CopyHostRangeCommand}" />
-                    <Button Content="复制全部结果" Command="{Binding CopyDetailsCommand}" />
-                </StackPanel>
-
-                <TextBlock Text="结果" Style="{StaticResource SectionHeader}" />
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="110" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="CIDR" />
-                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding CidrText}" FontWeight="SemiBold" />
-                    <TextBlock Grid.Row="1" Grid.Column="0" Text="网络地址" />
-                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding NetworkText}" />
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="广播地址" />
-                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding BroadcastText}" />
-                    <TextBlock Grid.Row="3" Grid.Column="0" Text="可用主机范围" />
-                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding HostRangeText}" />
-                    <TextBlock Grid.Row="4" Grid.Column="0" Text="通配符掩码" />
-                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding WildcardText}" />
-                    <TextBlock Grid.Row="5" Grid.Column="0" Text="地址数量" />
-                    <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding TotalText}" TextWrapping="Wrap" />
-                    <TextBlock Grid.Row="6" Grid.Column="0" Text="地址类型" />
-                    <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding KindText}" />
-                    <TextBlock Grid.Row="7" Grid.Column="0" Text="IP 二进制" />
-                    <!-- 反馈问题 1：二进制串较长，改用只读 TextBox 自动换行 + 提示，避免在窄窗口下被截断 -->
-                    <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding BinaryText}" IsReadOnly="True"
-                             FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="Wrap"
-                             HorizontalScrollBarVisibility="Auto" ToolTip="{Binding BinaryText}"
-                             BorderThickness="0" Background="Transparent" Padding="0" Margin="0,0,0,2" />
-                    <TextBlock Grid.Row="8" Grid.Column="0" Text="掩码二进制" />
-                    <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding MaskBinaryText}" IsReadOnly="True"
-                             FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="Wrap"
-                             HorizontalScrollBarVisibility="Auto" ToolTip="{Binding MaskBinaryText}"
-                             BorderThickness="0" Background="Transparent" Padding="0" Margin="0,0,0,2" />
-                    <TextBlock Grid.Row="9" Grid.Column="0" Text="同网段判断" />
-                    <TextBlock Grid.Row="9" Grid.Column="1" Text="{Binding SameSubnetText}" TextWrapping="Wrap" />
-                    <TextBlock Grid.Row="10" Grid.Column="0" Text="扫描预计耗时" />
-                    <TextBlock Grid.Row="10" Grid.Column="1" Text="{Binding EstimatedScanText}" />
-                </Grid>
-
-                <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="#1B5E9B" Margin="0,10,0,0" />
-            </StackPanel>
             </ScrollViewer>
         </Border>
 
+        <!-- 右列：只读网卡列表 + 主机地址列表 -->
         <Grid Grid.Column="1">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />

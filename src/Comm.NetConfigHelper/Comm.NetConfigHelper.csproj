@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- WinExe：助手在后台运行，不显示控制台窗口（用户若关掉窗口会连带终止回滚倒计时）。
+         诊断走日志文件与 self-test 报告文件，见 M3a 交付说明。 -->
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>Comm.NetConfigHelper</RootNamespace>
+    <AssemblyName>Comm.NetConfigHelper</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyTitle>通讯测试工具 网卡配置提权助手</AssemblyTitle>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Comm.Core\Comm.Core.csproj" />
+    <ProjectReference Include="..\Comm.Diagnostics\Comm.Diagnostics.csproj" />
+    <ProjectReference Include="..\Comm.Platform.Windows\Comm.Platform.Windows.csproj" />
+  </ItemGroup>
+</Project>

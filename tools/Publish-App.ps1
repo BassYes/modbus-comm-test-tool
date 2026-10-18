@@ -9,7 +9,10 @@
       1. 用本机 .NET 8 SDK（C:\Users\Bass\.dotnet\dotnet.exe）publish 到 artifacts\publish；
       2. 清掉产物上的 MOTW（防止产物被搬过之后又带上标记）；
       3. 可选地逐个 exe/dll 签名；
-      4. 可选地打成 zip（注意：zip 经网盘/微信传输后，解压出来的 exe 会重新带上标记）。
+      4. 可选地打成 zip（注意：zip 经网盘/微信传输后，解压出来的 exe 会重新带上标记）；
+      5. M3a：把提权助手 Comm.NetConfigHelper 一并发布到 helper\ 子目录（网卡配置写操作需要它，
+         未签名时 UAC 会显示"未知发布者"，因此它同样必须纳入签名流水线）；
+      6. M3b：创建空的 plugins\ 目录（插件宿主只加载这里的插件，见 AD-13）。
 
 .PARAMETER Configuration
     默认 Release。
@@ -58,7 +61,9 @@ param(
     [string] $OutputPath,
     [switch] $Sign,
     [string] $TimestampServer,
-    [switch] $Zip
+    [switch] $Zip,
+    # M3b：把参考示例插件装进 plugins\Sample（仅用于演示/自测；正式分发默认不装）
+    [switch] $WithSamplePlugin
 )
 
 $ErrorActionPreference = 'Stop'
@@ -85,6 +90,51 @@ Write-Host "发布到: $OutputPath" -ForegroundColor Cyan
     -o $OutputPath
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish 失败（退出码 $LASTEXITCODE）" }
 
+# ---------------------------------------------------------------------------------------------
+# M3a：提权助手必须与主程序一起分发，否则网卡配置功能不可用（规划 12.5）。
+# 它放在 helper\ 子目录，主程序按 NetConfigHelperLocator 的搜索顺序（程序目录 → helper\）找到它。
+# ---------------------------------------------------------------------------------------------
+$helperProject = Join-Path $repoRoot 'src\Comm.NetConfigHelper\Comm.NetConfigHelper.csproj'
+$helperOutput  = Join-Path $OutputPath 'helper'
+New-Item -ItemType Directory -Path $helperOutput -Force | Out-Null
+
+Write-Host "发布提权助手到: $helperOutput" -ForegroundColor Cyan
+& $dotnet publish $helperProject `
+    -c $Configuration `
+    -r $Runtime `
+    --self-contained:$selfContained `
+    -p:PublishSingleFile=false `
+    -p:DebugType=none `
+    -o $helperOutput
+if ($LASTEXITCODE -ne 0) { throw "提权助手发布失败（退出码 $LASTEXITCODE）" }
+
+# ---------------------------------------------------------------------------------------------
+# M3b：插件受信目录（规划 8.3、AD-13）。默认只创建空目录；-WithSamplePlugin 时装参考示例插件。
+# ---------------------------------------------------------------------------------------------
+$pluginsOutput = Join-Path $OutputPath 'plugins'
+New-Item -ItemType Directory -Path $pluginsOutput -Force | Out-Null
+
+$pluginsReadme = @"
+plugins 目录（插件受信目录）
+============================
+1. 本程序只加载 plugins\<插件目录>\plugin.json 描述的插件；不会加载其它位置的程序集（规划 AD-13）。
+2. 每个插件一个子目录，至少包含 plugin.json 与它声明的入口程序集（entry）。
+3. 插件是进程内代码，AssemblyLoadContext 不是安全沙箱：只放来源可信的插件。
+4. 插件声明的写能力（mayWrite=true）在使用时会再次提示；扩展中心可以查看能力、启用与禁用。
+5. 插件清单示例见发布包内 plugins\Sample（若随包提供）或源码 samples\Comm.Plugin.Sample\plugin.json。
+"@
+Set-Content -LiteralPath (Join-Path $pluginsOutput '插件目录说明.txt') -Value $pluginsReadme -Encoding UTF8
+
+if ($WithSamplePlugin) {
+    $sampleProject = Join-Path $repoRoot 'samples\Comm.Plugin.Sample\Comm.Plugin.Sample.csproj'
+    $sampleOutput  = Join-Path $pluginsOutput 'Sample'
+    New-Item -ItemType Directory -Path $sampleOutput -Force | Out-Null
+    & $dotnet publish $sampleProject -c $Configuration -p:DebugType=none -o $sampleOutput
+    if ($LASTEXITCODE -ne 0) { throw "示例插件发布失败（退出码 $LASTEXITCODE）" }
+    Remove-Item -LiteralPath (Join-Path $sampleOutput 'Comm.Plugins.Abstractions.dll') -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath (Join-Path $sampleOutput 'Comm.Core.dll') -ErrorAction SilentlyContinue
+}
+
 # 清 MOTW
 Get-ChildItem -LiteralPath $OutputPath -Recurse -File -Force | Unblock-File -ErrorAction SilentlyContinue
 
@@ -93,7 +143,9 @@ if ($Sign) {
     Write-Host "开始签名（exe + 自有 dll）……" -ForegroundColor Cyan
     $ownAssemblies = @('CommTestTool.exe', 'Comm.Core.dll', 'Comm.Protocols.Modbus.dll', 'Comm.Transport.dll',
                        'Comm.Session.dll', 'Comm.Scanning.dll', 'Comm.Capture.dll', 'Comm.Network.dll',
-                       'Comm.Diagnostics.dll', 'Comm.Settings.dll', 'Comm.Plugins.Abstractions.dll')
+                       'Comm.Diagnostics.dll', 'Comm.Settings.dll', 'Comm.Plugins.Abstractions.dll',
+                       'Comm.Plugins.Host.dll', 'Comm.Platform.Windows.dll',
+                       'helper\Comm.NetConfigHelper.exe', 'helper\Comm.NetConfigHelper.dll')
     $targets = @()
     foreach ($name in $ownAssemblies) {
         $path = Join-Path $OutputPath $name
@@ -121,6 +173,9 @@ $readmeText = @"
 3. 需要彻底不弹提示，请使用签名安装包（安装出来的文件不带网络标记）。
 4. 本程序不需要管理员权限；数据与日志默认写在程序同级 data/ 目录；
    若放在只读目录（如 Program Files），会自动回退到 %LOCALAPPDATA%\通讯测试工具\data。
+5. helper\Comm.NetConfigHelper.exe 是"网卡配置提权助手"：只有在你点击"应用配置"时才会
+   通过 UAC 拉起它；它只接受固定的几类命令，不会执行任意命令行。请勿删除该子目录。
+6. plugins\ 是插件受信目录：只把可信插件放进这里；详见 plugins\插件目录说明.txt。
 "@
 Set-Content -LiteralPath (Join-Path $OutputPath '便携包说明.txt') -Value $readmeText -Encoding UTF8
 
@@ -136,6 +191,11 @@ if ($Zip) {
 }
 
 Write-Host ""
-Write-Host "完成。产物：" -ForegroundColor Green
+Write-Host "完成。目录结构：" -ForegroundColor Green
+Write-Host "  $OutputPath\CommTestTool.exe           主程序（普通权限）"
+Write-Host "  $OutputPath\helper\Comm.NetConfigHelper.exe  网卡配置提权助手（按需 UAC）"
+Write-Host "  $OutputPath\plugins\                   插件受信目录"
+Write-Host ""
+Write-Host "顶层产物：" -ForegroundColor Green
 Get-ChildItem -LiteralPath $OutputPath -File | Select-Object Name, @{n = 'KB'; e = { [math]::Round($_.Length / 1KB) } } |
     Format-Table -AutoSize
