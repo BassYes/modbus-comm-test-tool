@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.Windows.Data;
@@ -16,18 +16,20 @@ namespace Comm.App.Wpf.ViewModels;
 /// 寄存器定位（M2-1，规划 4.4，需求 R-03）。
 /// 向导式三步：范围与目标 → 采样 / 快照 → 候选列表；候选项必须同时显示协议地址、原始寄存器与解释规则。
 /// </summary>
-public partial class RegisterLocatorViewModel : ObservableObject
+public partial class RegisterLocatorViewModel : ObservableObject, IDisposable
 {
     private readonly AppServices _app;
+    private readonly SessionContext _session;
     private CancellationTokenSource? _cts;
     private PauseGate? _gate;
 
-    public RegisterLocatorViewModel(AppServices app)
+    public RegisterLocatorViewModel(AppServices app, SessionContext session)
     {
         _app = app;
+        _session = session;
         var scan = app.Settings.Scan;
         _area = scan.DefaultArea == DataArea.InputRegisters ? DataArea.InputRegisters : DataArea.HoldingRegisters;
-        _unitId = app.Sessions.DefaultUnitId;
+        _unitId = _session.DefaultUnitId;
 
         CandidatesView = CollectionViewSource.GetDefaultView(Candidates);
         CandidatesView.Filter = o => !OnlyHighScore || ((RegisterCandidate)o).MatchScore >= MinScore;
@@ -195,7 +197,7 @@ public partial class RegisterLocatorViewModel : ObservableObject
     [RelayCommand]
     private async Task StartAsync()
     {
-        var locator = _app.Sessions.CreateRegisterLocator();
+        var locator = _session.CreateRegisterLocator();
         if (locator is null)
         {
             _app.Dialogs.Warn("尚未连接", "请先在“连接中心”打开串口或连接 TCP。");
@@ -338,8 +340,8 @@ public partial class RegisterLocatorViewModel : ObservableObject
             Note = $"来自寄存器定位（{SelectedCandidate.Reason}）"
         };
 
-        _app.WatchList.Add(point);
-        StatusMessage = _app.WatchList.StatusMessage;
+        _session.WatchList.Add(point);
+        StatusMessage = _session.WatchList.StatusMessage;
     }
 
     [RelayCommand]
@@ -369,8 +371,8 @@ public partial class RegisterLocatorViewModel : ObservableObject
     {
         if (SelectedCandidate is null) return;
 
-        var service = _app.Sessions.CreateManualSendService(FrameTransport.FollowSession, _app.Sessions.SilenceThresholdMs);
-        if (!service.CanSend && _app.Sessions.Current is null)
+        var service = _session.CreateManualSendService(FrameTransport.FollowSession, _session.SilenceThresholdMs);
+        if (!service.CanSend && _session.Current is null)
         {
             StatusMessage = "尚未连接：仍然生成了报文（可在“报文工具”页查看），连接后才能发送。";
         }
@@ -381,4 +383,13 @@ public partial class RegisterLocatorViewModel : ObservableObject
         _app.RequestHex(hex, $"已生成读取报文：{hex}（在“报文工具”页可发送）");
         StatusMessage = "已把读取报文发送到“报文工具”页。";
     }
+
+    // ---------------------------------------------------------------- 释放（M3b：页面属于某个会话）
+
+    /// <summary>关闭会话时由工作区调用。本页没有长期订阅，保留方法以便统一释放。</summary>
+    public void Dispose()
+    {
+        // 无长期订阅（定位器由每次操作临时创建）
+    }
+
 }

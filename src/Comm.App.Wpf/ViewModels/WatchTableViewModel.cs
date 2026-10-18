@@ -1,4 +1,4 @@
-using Comm.App.Wpf.Services;
+﻿using Comm.App.Wpf.Services;
 using Comm.Protocols.Modbus;
 using Comm.Scanning;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -10,27 +10,29 @@ namespace Comm.App.Wpf.ViewModels;
 /// 监视表页面（M2-4，规划 4.3.5、4.4.5）。
 /// 点位的实际存储与周期刷新在应用级单例 <see cref="WatchListService"/> 中，因此数据扫描与寄存器定位页也能“加入监视表”。
 /// </summary>
-public partial class WatchTableViewModel : ObservableObject
+public partial class WatchTableViewModel : ObservableObject, IDisposable
 {
     private readonly AppServices _app;
+    private readonly SessionContext _session;
 
-    public WatchTableViewModel(AppServices app)
+    public WatchTableViewModel(AppServices app, SessionContext session)
     {
         _app = app;
+        _session = session;
         var scan = app.Settings.Scan;
         _intervalMs = scan.WatchTableIntervalMs;
         _area = scan.DefaultArea;
         _dataType = scan.DefaultDataType;
         _byteOrder = scan.DefaultByteOrder;
-        _unitId = app.Sessions.DefaultUnitId;
+        _unitId = _session.DefaultUnitId;
 
-        Watch.PointsChanged += (_, _) => RefreshView();
-        Watch.SamplesChanged += (_, _) => RefreshView();
-        Watch.PropertyChanged += (_, _) => RefreshView();
+        Watch.PointsChanged += OnWatchChanged;
+        Watch.SamplesChanged += OnWatchChanged;
+        Watch.PropertyChanged += OnWatchPropertyChanged;
         RefreshView();
     }
 
-    public WatchListService Watch => _app.WatchList;
+    public WatchListService Watch => _session.WatchList;
 
     /// <summary>监视表最小刷新周期（不低于 200 ms，避免打爆现场总线）。</summary>
     public TimeSpan MinimumInterval => TimeSpan.FromMilliseconds(200);
@@ -212,4 +214,20 @@ public partial class WatchTableViewModel : ObservableObject
 
         _app.Dialogs.ShowText("点位详情", text);
     }
+
+    // ---------------------------------------------------------------- 监视表事件与释放（M3b：监视表是会话作用域的）
+
+    private void OnWatchChanged(object? sender, EventArgs e) => RefreshView();
+
+    private void OnWatchPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => RefreshView();
+
+    /// <summary>关闭会话时由工作区调用：解除监视表订阅并停止周期刷新。</summary>
+    public void Dispose()
+    {
+        Watch.PointsChanged -= OnWatchChanged;
+        Watch.SamplesChanged -= OnWatchChanged;
+        Watch.PropertyChanged -= OnWatchPropertyChanged;
+        if (Watch.IsRunning) Watch.Stop("会话已关闭");
+    }
+
 }

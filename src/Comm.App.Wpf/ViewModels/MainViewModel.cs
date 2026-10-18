@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Windows.Threading;
 using Comm.App.Wpf.Services;
 using Comm.Diagnostics;
@@ -9,42 +9,45 @@ namespace Comm.App.Wpf.ViewModels;
 
 public sealed record NavItem(string Title, string Glyph, object ViewModel);
 
+/// <summary>
+/// 主窗口显示模型（M3b R-16 重构后）：顶部是会话标签页，左侧导航由"活动会话的页面 + 全局页面"组成。
+/// 每个会话的页面来自它自己的工作区（<see cref="SessionWorkspaceViewModel"/>），因此多会话之间不共享连接与状态。
+/// </summary>
 public partial class MainViewModel : ObservableObject
 {
     private readonly AppServices _app;
+    private readonly SessionWorkspaces _workspaces;
+    private readonly SessionWindowManager _windows;
     private readonly DispatcherTimer _statusTimer;
+    private readonly List<NavItem> _globalNav;
+    private bool _syncing;
 
     public MainViewModel(
         AppServices app,
-        ConnectionViewModel connection,
-        DeviceScanViewModel deviceScan,
-        DataScanViewModel dataScan,
-        RegisterLocatorViewModel registerLocator,
-        WatchTableViewModel watchTable,
-        ManualSendViewModel manualSend,
-        MonitorViewModel monitor,
+        SessionWorkspaces workspaces,
+        SessionWindowManager windows,
         NetworkToolsViewModel networkTools,
         LanScanViewModel lanScan,
-        SettingsViewModel settings)
+        SettingsViewModel settings,
+        ExtensionCenterViewModel extensions)
     {
         _app = app;
+        _workspaces = workspaces;
+        _windows = windows;
 
-        // 导航顺序决定 --page=N 的编号（新增页后请同步更新 README 与 docs/capture-pages.sh）
-        NavItems = new ObservableCollection<NavItem>
+        // 全局页面（不属于任何会话）：网络工具、局域网扫描、扩展中心、设置与日志。
+        _globalNav = new List<NavItem>
         {
-            new("连接中心", "⇄", connection),
-            new("设备扫描", "⌕", deviceScan),
-            new("数据扫描", "▤", dataScan),
-            new("寄存器定位", "◎", registerLocator),
-            new("监视表", "◉", watchTable),
-            new("报文工具", "✎", manualSend),
-            new("报文监视", "≡", monitor),
             new("网络工具", "⌘", networkTools),
             new("局域网扫描", "⇉", lanScan),
+            new("扩展中心", "⧉", extensions),
             new("设置与日志", "⚙", settings)
         };
 
-        SelectedNav = NavItems[0];
+        _workspaces.Changed += (_, _) => SyncWorkspaces();
+        _windows.Changed += (_, _) => SyncWorkspaces();
+        _app.Sessions.SessionsChanged += (_, _) => SyncActive();
+        SyncWorkspaces();
         ApplyStartupPageArgument();
 
         _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
@@ -54,27 +57,14 @@ public partial class MainViewModel : ObservableObject
         RefreshStatus();
     }
 
-    /// <summary>支持 --page=N 直接打开指定功能页（便于支持、演示与界面截图）。</summary>
-    private void ApplyStartupPageArgument()
-    {
-        try
-        {
-            foreach (var arg in Environment.GetCommandLineArgs().Skip(1))
-            {
-                if (!arg.StartsWith("--page=", StringComparison.OrdinalIgnoreCase)) continue;
-                if (int.TryParse(arg[7..], out var index) && index >= 1 && index <= NavItems.Count)
-                {
-                    SelectedNav = NavItems[index - 1];
-                }
-            }
-        }
-        catch (Exception)
-        {
-            // 参数解析失败不影响正常启动
-        }
-    }
+    /// <summary>会话标签页数据源（每个会话一个工作区）。</summary>
+    public ObservableCollection<SessionWorkspaceViewModel> Workspaces { get; } = new();
 
-    public ObservableCollection<NavItem> NavItems { get; }
+    [ObservableProperty]
+    private SessionWorkspaceViewModel? _activeWorkspace;
+
+    /// <summary>左侧导航：活动会话的页面 + 全局页面。</summary>
+    public ObservableCollection<NavItem> NavItems { get; } = new();
 
     [ObservableProperty]
     private NavItem? _selectedNav;
@@ -92,7 +82,11 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string _connectionParamsText = "未连接";
 
-    /// <summary>跨页面通知（例如“已生成读取报文”）。</summary>
+    /// <summary>会话摘要（M3b：会话数 / 上限 / 已拆分窗口数）。</summary>
+    [ObservableProperty]
+    private string _sessionText = "会话 1/8";
+
+    /// <summary>跨页面通知（例如"已生成读取报文"）。</summary>
     [ObservableProperty]
     private string _messageText = string.Empty;
 
@@ -114,11 +108,94 @@ public partial class MainViewModel : ObservableObject
     /// <summary>窗口标题（X-9：版本号单一来源，不再写死在 XAML 里）。</summary>
     public string VersionTitle => AppInfo.Title;
 
-    /// <summary>“关于”行：版本 + 提交号 + 构建时间。</summary>
+    /// <summary>"关于"行：版本 + 提交号 + 构建时间。</summary>
     public string AboutText => AppInfo.FullVersionText;
+
+    // ------------------------------------------------------------------ 会话标签页
+
+    private void SyncWorkspaces()
+    {
+        _syncing = true;
+        try
+        {
+            var previous = ActiveWorkspace;
+            Workspaces.Clear();
+            foreach (var workspace in _workspaces.Workspaces) Workspaces.Add(workspace);
+
+            // 活动会话（注册表）优先；否则保持原选择；再否则取第一个。
+            var active = _workspaces.Find(_app.Sessions.Active.SessionId);
+            ActiveWorkspace = active ?? (previous is not null && Workspaces.Contains(previous) ? previous : Workspaces.FirstOrDefault());
+        }
+        finally
+        {
+            _syncing = false;
+        }
+
+        RebuildNav();
+        RefreshStatus();
+    }
+
+    private void SyncActive()
+    {
+        var active = _workspaces.Find(_app.Sessions.Active.SessionId);
+        if (active is not null && !ReferenceEquals(active, ActiveWorkspace))
+        {
+            ActiveWorkspace = active;
+        }
+
+        RefreshStatus();
+    }
+
+    partial void OnActiveWorkspaceChanged(SessionWorkspaceViewModel? value)
+    {
+        if (!_syncing && value is not null) _app.Sessions.Activate(value.SessionId);
+        RebuildNav();
+        RefreshStatus();
+    }
+
+    private void RebuildNav()
+    {
+        var workspace = ActiveWorkspace;
+        var previousSelection = SelectedNav;
+
+        _syncing = true;
+        try
+        {
+            NavItems.Clear();
+            if (workspace is not null)
+            {
+                foreach (var item in workspace.NavItems) NavItems.Add(item);
+            }
+
+            foreach (var item in _globalNav) NavItems.Add(item);
+
+            // 保持当前选择（同一工作区切换页面时不要跳回第一页）。
+            SelectedNav = previousSelection is not null && NavItems.Contains(previousSelection)
+                ? previousSelection
+                : workspace?.SelectedNav ?? _globalNav.FirstOrDefault();
+        }
+        finally
+        {
+            _syncing = false;
+        }
+
+        OnPropertyChanged(nameof(CurrentPage));
+    }
 
     partial void OnSelectedNavChanged(NavItem? value)
     {
+        if (value is null)
+        {
+            OnPropertyChanged(nameof(CurrentPage));
+            return;
+        }
+
+        // 会话页面：把选择回写到该会话自己的工作区，拆分窗口与本窗口保持一致。
+        if (ActiveWorkspace is not null && ActiveWorkspace.NavItems.Contains(value))
+        {
+            ActiveWorkspace.SelectedNav = value;
+        }
+
         OnPropertyChanged(nameof(CurrentPage));
     }
 
@@ -133,19 +210,111 @@ public partial class MainViewModel : ObservableObject
 
     private bool _suppressLogToggle;
 
+    // ------------------------------------------------------------------ 命令
+
+    [RelayCommand]
+    private void NewSession()
+    {
+        var result = _workspaces.CreateSession();
+        if (!result.IsSuccess)
+        {
+            _app.Dialogs.Warn("无法新建会话", result.Error!.ToUserText());
+            return;
+        }
+
+        SyncWorkspaces();
+        ActiveWorkspace = _workspaces.Find(result.Value!.SessionId);
+        MessageText = $"已新建会话「{result.Value.Name}」；它拥有独立的连接、扫描、报文与监视上下文。";
+    }
+
+    [RelayCommand]
+    private void CloseSession()
+    {
+        var workspace = ActiveWorkspace;
+        if (workspace is null) return;
+
+        if (!_app.Dialogs.Confirm("关闭会话",
+                $"确定关闭会话「{workspace.Name}」吗？\n\n" +
+                $"当前状态：{workspace.Session.StatusText}\n" +
+                "该会话的扫描与循环发送会先停止；其他会话不受影响。")) return;
+
+        var result = _workspaces.CloseSession(workspace.SessionId);
+        if (!result.IsSuccess)
+        {
+            _app.Dialogs.Warn("无法关闭会话", result.Error!.ToUserText());
+            return;
+        }
+
+        MessageText = result.Value ?? "会话已关闭";
+        SyncWorkspaces();
+    }
+
+    [RelayCommand]
+    private void SplitSession()
+    {
+        var workspace = ActiveWorkspace;
+        if (workspace is null) return;
+
+        var result = _windows.Split(workspace.SessionId);
+        if (!result.IsSuccess)
+        {
+            _app.Dialogs.Warn("无法拆分窗口", result.Error!.ToUserText());
+            return;
+        }
+
+        MessageText = result.Value ?? "已拆分到独立窗口";
+        RebuildNav();
+    }
+
+    [RelayCommand]
+    private void ReturnSession()
+    {
+        var workspace = ActiveWorkspace;
+        if (workspace is null) return;
+
+        var result = _windows.Return(workspace.SessionId);
+        MessageText = result.IsSuccess ? result.Value ?? "已移回主窗口" : result.Error!.ToUserText();
+        RebuildNav();
+    }
+
+    /// <summary>支持 --page=N 直接打开指定功能页（N：1~7 会话页面，8~10 全局页面）。</summary>
+    private void ApplyStartupPageArgument()
+    {
+        try
+        {
+            foreach (var arg in Environment.GetCommandLineArgs().Skip(1))
+            {
+                if (!arg.StartsWith("--page=", StringComparison.OrdinalIgnoreCase)) continue;
+                if (int.TryParse(arg[7..], out var index) && index >= 1 && index <= NavItems.Count)
+                {
+                    SelectedNav = NavItems[index - 1];
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // 参数解析失败不影响正常启动
+        }
+    }
+
     private void RefreshStatus()
     {
-        ConnectionText = _app.Sessions.StatusText;
-        ConnectionParamsText = _app.Sessions.Snapshot?.ShortText ?? "未连接";
-        var stats = _app.Sessions.Current?.Statistics;
-        StatisticsText = stats is null
-            ? "TX 0 | RX 0 | 超时 0 | 校验错误 0 | 异常响应 0"
-            : $"TX {stats.TxCount} | RX {stats.RxCount} | 超时 {stats.TimeoutCount} | 校验错误 {stats.ChecksumErrorCount} | 异常响应 {stats.ExceptionCount} | 未匹配 {stats.UnmatchedCount}";
+        var workspace = ActiveWorkspace;
+        var session = workspace?.Session;
 
-        var monitor = _app.Monitor;
-        MonitorText = $"监视：{(monitor.DisplayPaused ? "已暂停显示" : "运行")}；显示 {monitor.Rows.Count} / 共 {monitor.TotalCount}" +
-                       (monitor.DroppedFromDisplay > 0 ? $"（显示已丢弃 {monitor.DroppedFromDisplay} 条，落盘不受影响）" : string.Empty) +
-                       (monitor.IsRecording ? "；记录中" : string.Empty);
+        ConnectionText = session?.StatusText ?? "未连接";
+        ConnectionParamsText = session?.Snapshot?.ShortText ?? "未连接";
+        StatisticsText = session is null ? "TX 0 | RX 0" : session.Statistics.ToStatusText();
+
+        var monitor = workspace?.Session.Monitor;
+        MonitorText = monitor is null
+            ? "监视：未就绪"
+            : $"监视：{(monitor.DisplayPaused ? "已暂停显示" : "运行")}；本会话显示 {monitor.Rows.Count} 条" +
+              (monitor.DroppedFromDisplay > 0 ? $"（显示已丢弃 {monitor.DroppedFromDisplay} 条，落盘不受影响）" : string.Empty) +
+              (monitor.IsRecording ? "；记录中" : string.Empty);
+
+        SessionText = $"会话 {Workspaces.Count}/{_app.Sessions.MaxSessions}" +
+                      (_windows.DetachedCount > 0 ? $"（{_windows.DetachedCount} 个已拆分窗口）" : string.Empty);
 
         LogText = _app.Log.Enabled
             ? $"日志：开 → {_app.Log.ActiveLogFile ?? _app.Log.Directory}"

@@ -1,0 +1,49 @@
+<Window x:Class="Comm.App.Wpf.Views.SessionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{Binding WindowTitle}"
+        Height="780" Width="1180" MinWidth="900" MinHeight="480"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="{StaticResource UiFont}" FontSize="13">
+    <DockPanel>
+        <!-- 会话标题与移回主窗口入口 -->
+        <Border DockPanel.Dock="Top" Background="#2B3A4A" Padding="10,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding HeaderText}" Foreground="White"
+                           FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" />
+                <Button Grid.Column="1" Content="移回主窗口" Click="OnMoveBack" Margin="8,0,0,0" />
+            </Grid>
+        </Border>
+
+        <!-- 会话内状态栏：连接 / TX-RX / 监视 -->
+        <Border DockPanel.Dock="Bottom" Background="#F0F2F5" BorderBrush="#D6D6DC" BorderThickness="0,1,0,0" Padding="10,4">
+            <StackPanel>
+                <TextBlock Text="{Binding Workspace.ConnectionText}" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding Workspace.StatisticsText}" />
+                <TextBlock Text="{Binding Workspace.MonitorText}" TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+        </Border>
+
+        <!-- 会话内导航 -->
+        <Border DockPanel.Dock="Left" Width="150" Background="#F7F7F9" BorderBrush="#D6D6DC" BorderThickness="0,0,1,0">
+            <ListBox ItemsSource="{Binding Workspace.NavItems}" SelectedItem="{Binding Workspace.SelectedNav}"
+                     BorderThickness="0" Background="Transparent" Padding="6">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal" Margin="2,4">
+                            <TextBlock Text="{Binding Glyph}" Width="20" FontSize="14" />
+                            <TextBlock Text="{Binding Title}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+
+        <ContentControl Content="{Binding Workspace.CurrentPage}" />
+    </DockPanel>
+</Window>

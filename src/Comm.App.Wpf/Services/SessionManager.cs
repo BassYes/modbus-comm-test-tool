@@ -1,388 +1,249 @@
 using Comm.Capture;
 using Comm.Core;
-using Comm.Core.Codecs;
 using Comm.Core.Errors;
-using Comm.Core.Frames;
 using Comm.Core.Transport;
 using Comm.Diagnostics;
 using Comm.Network.Discovery;
-using Comm.Protocols.Modbus;
 using Comm.Scanning;
 using Comm.Session;
 using Comm.Settings;
-using Comm.Transport;
 
 namespace Comm.App.Wpf.Services;
 
-public enum ConnectionKind
-{
-    None,
-    Serial,
-    Tcp
-}
-
-/// <summary>报文构建 / 发送使用的协议（R-19：允许显式选择，未连接时也能生成）。</summary>
-public enum FrameTransport
-{
-    /// <summary>跟随当前会话；未连接时按 RTU 处理并在界面提示。</summary>
-    FollowSession,
-
-    Rtu,
-    Tcp
-}
-
-/// <summary>已连接参数的**不可变快照**。界面底栏必须显示它，而不是仍可编辑的输入框（R-18）。</summary>
-public sealed record ConnectionSnapshot(
-    ConnectionKind Kind,
-    string Endpoint,
-    string CodecName,
-    string ParametersText,
-    byte UnitId)
-{
-    public string ShortText => Kind switch
-    {
-        ConnectionKind.Serial => $"已连接 {Endpoint}（{CodecName}）· {ParametersText}",
-        ConnectionKind.Tcp => $"已连接 {Endpoint}（{CodecName}）· {ParametersText}",
-        _ => "未连接"
-    };
-}
-
 /// <summary>
-/// 会话管理：创建/连接/断开传输通道，并向各功能页提供会话与服务实例。
-/// 说明：本类只实现 <see cref="IAsyncDisposable"/>，**退出时必须异步释放**（见 M1 反馈问题 5/10），
-/// 且释放是幂等的——容器释放与手工释放可能都会调用它。
-/// R-11：同时实现 <see cref="ISerialReconfigurator"/>，为未知波特率/校验位扫描提供串口重配与恢复。
+/// 会话注册表（M3b R-16 重构，规划 4.1.3、21.2.2）。
+/// <para>
+/// 每个会话是一个独立的 <see cref="SessionContext"/>：各自持有传输通道、事务层、统计、请求队列、
+/// 串口重配上下文与监视投影；<see cref="FrameBus"/>、日志、设置是全局共享服务，帧记录带 SessionId，
+/// 各窗口只投影自己的数据。
+/// </para>
+/// <para>
+/// 串口资源按 <c>serial:COMx</c> 全局独占（同一 COM 口不能被两个会话打开）；TCP 会话可并行指向同一目标。
+/// 会话数量上限默认 8（设置页可调），至少保留 1 个会话。
+/// </para>
+/// <para>
+/// 兼容说明：本类仍保留了 M2 时期"单会话"形态的属性与方法（<see cref="Current"/>、<see cref="IsConnected"/>、
+/// <see cref="CreateDeviceScanService"/> 等），它们**等价于当前活动会话**（<see cref="Active"/>）。
+/// 新代码请直接依赖会话作用域的 <see cref="SessionContext"/>；这些转发成员只用于平滑迁移。
+/// </para>
 /// </summary>
 public sealed class SessionManager : IAsyncDisposable, ISerialReconfigurator
 {
-    private readonly IFrameObserver _observer;
+    private readonly List<SessionContext> _sessions = new();
+    private readonly FrameBus _frameBus;
     private readonly LogGate _log;
-    private ModbusSession? _session;
-    private SerialProfile? _serialProfile;
-    private TcpProfile? _tcpProfile;
-
-    /// <summary>参数扫描前的原始串口配置（R-11：四种终态都要恢复到它）。</summary>
-    private SerialProfile? _originalSerialProfile;
-    private int _originalSilenceThresholdMs = RtuTiming.MinimumSilenceThresholdMs;
-
+    private readonly SerialPortRegistry _ports;
+    private AppSettings _settings;
+    private SessionContext _active;
+    private int _sessionCounter;
     private bool _disposed;
 
-    public SessionManager(FrameBus frameBus, LogGate log)
+    public SessionManager(FrameBus frameBus, LogGate log, SerialPortRegistry ports, AppSettings settings)
     {
-        _observer = frameBus;
+        _frameBus = frameBus;
         _log = log;
+        _ports = ports;
+        _settings = settings;
+        _active = CreateSessionInternal($"会话 1");
+        _sessions.Add(_active);
     }
 
-    public ModbusSession? Current => _session;
-    public ConnectionKind Kind { get; private set; } = ConnectionKind.None;
-    public bool IsConnected => _session is { IsOpen: true };
-    public bool IsSerialConnected => IsConnected && Kind == ConnectionKind.Serial;
-    public bool IsTcpConnected => IsConnected && Kind == ConnectionKind.Tcp;
-    public byte DefaultUnitId { get; set; } = 1;
+    /// <summary>按创建顺序排列的全部会话。</summary>
+    public IReadOnlyList<SessionContext> Sessions => _sessions;
 
-    /// <summary>RTU 静默判定下限（打开串口时使用）。</summary>
-    public int SilenceThresholdMs { get; private set; } = 5;
+    /// <summary>当前活动会话（界面顶部标签页 / 底栏状态来源）。</summary>
+    public SessionContext Active => _active;
 
-    /// <summary>当前连接参数快照；未连接时为 null。</summary>
-    public ConnectionSnapshot? Snapshot { get; private set; }
+    /// <summary>会话数量上限（规划 4.1.3：默认 8，设置页可调）。</summary>
+    public int MaxSessions => Math.Clamp(_settings.Sessions.MaxSessions, 1, 32);
 
-    public event EventHandler? CurrentChanged;
+    /// <summary>会话列表或活动会话发生变化（会话标签页、状态栏刷新）。</summary>
+    public event EventHandler? SessionsChanged;
 
-    public string StatusText => _session switch
+    /// <summary>新增会话；达到上限时返回失败并说明原因（规划 21.2.2 第 4 点）。</summary>
+    public Result<SessionContext> CreateSession(string? name = null, bool activate = true)
     {
-        null => "未连接",
-        { IsOpen: true } => Snapshot?.ShortText ?? $"已连接 {_session.Channel.Endpoint}（{_session.Codec.Name}）",
-        _ => $"已断开 {_session.Channel.Endpoint}（{_session.Codec.Name}）"
-    };
+        if (_sessions.Count >= MaxSessions)
+        {
+            return Result<SessionContext>.Fail(new ErrorInfo(
+                ErrorCodes.ValidationBadInput, ErrorCategory.Validation, Severity.Warning,
+                $"已达到会话上限（{MaxSessions} 个）。",
+                Hint: "可在“设置与日志”页调高上限，或先关闭不再使用的会话。"));
+        }
 
-    public async Task<Result<string>> ConnectSerialAsync(SerialProfile profile, int silenceThresholdMs,
-        CancellationToken cancellationToken = default)
-    {
-        // R-11：用户主动连接时记住“原始参数”，参数扫描结束后要恢复到它。
-        _originalSerialProfile = profile;
-        _originalSilenceThresholdMs = silenceThresholdMs;
-        return await OpenSerialAsync(profile, silenceThresholdMs, cancellationToken).ConfigureAwait(false);
+        var session = CreateSessionInternal(name ?? $"会话 {_sessions.Count + 1}");
+        _sessions.Add(session);
+        if (activate) Activate(session.SessionId);
+        else SessionsChanged?.Invoke(this, EventArgs.Empty);
+        _log.Info("Session", $"已创建会话「{session.Name}」（{session.SessionId}），当前会话数 {_sessions.Count}/{MaxSessions}");
+        return Result<SessionContext>.Ok(session);
     }
 
-    /// <summary>打开（或重开）串口会话。参数扫描切换参数时也走这条路径。</summary>
-    private async Task<Result<string>> OpenSerialAsync(SerialProfile profile, int silenceThresholdMs,
-        CancellationToken cancellationToken)
+    private SessionContext CreateSessionInternal(string name)
     {
-        await DisconnectAsync().ConfigureAwait(false);
-
-        // F-5：静默阈值随波特率变化。固定 5 ms 在 1200 bps（3.5 字符 ≈ 32 ms）下会误拆帧。
-        int silence = RtuTiming.ComputeSilenceThresholdMs(profile.BaudRate, silenceThresholdMs);
-        int effectiveTimeout = RtuTiming.EffectiveResponseTimeoutMs(profile.ResponseTimeoutMs, profile.BaudRate);
-
-        var options = new SessionOptions
-        {
-            SessionId = Guid.NewGuid().ToString("N")[..8],
-            Name = profile.Name,
-            ResponseTimeoutMs = effectiveTimeout,
-            RetryCount = profile.RetryCount,
-            TurnaroundDelayMs = profile.TurnaroundDelayMs,
-            SuppressEcho = profile.SuppressEcho,
-            IsSerial = true
-        };
-
-        var channel = new SerialChannel(profile.ToSerialSettings());
-        var session = new ModbusSession(channel, new ModbusRtuCodec(silence), options, _observer);
-
-        try
-        {
-            await session.ConnectAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (CommException ex)
-        {
-            _log.Error("Session", $"串口连接失败：{ex.Error.Message}", ex);
-            await session.DisposeAsync().ConfigureAwait(false);
-            return Result<string>.Fail(ex.Error);
-        }
-
-        _session = session;
-        _serialProfile = profile;
-        _tcpProfile = null;
-        SilenceThresholdMs = silence;
-        Kind = ConnectionKind.Serial;
-        DefaultUnitId = 1;
-        Snapshot = new ConnectionSnapshot(ConnectionKind.Serial, profile.PortName, session.Codec.Name,
-            $"{profile.BaudRate},{profile.DataBits},{SerialSettings.ParityCode(profile.Parity)},{SerialSettings.StopBitsCode(profile.StopBits)}" +
-            $" · 超时 {effectiveTimeout} ms · 重试 {profile.RetryCount}",
-            DefaultUnitId);
-
-        _log.Info("Session",
-            $"串口已连接：{profile.PortName} {profile.BaudRate},{profile.DataBits},{SerialSettings.ParityCode(profile.Parity)},{SerialSettings.StopBitsCode(profile.StopBits)}；" +
-            $"超时 {effectiveTimeout} ms，重试 {profile.RetryCount}，静默阈值 {silence} ms",
-            session.SessionId);
-        CurrentChanged?.Invoke(this, EventArgs.Empty);
-        return Result<string>.Ok(StatusText);
+        _sessionCounter++;
+        var id = Guid.NewGuid().ToString("N")[..8];
+        var session = new SessionContext(id, name, _frameBus, _log, _ports, _settings, OnSessionStateChanged);
+        _ports.RegisterName(id, session.Name);
+        return session;
     }
 
-    public async Task<Result<string>> ConnectTcpAsync(TcpProfile profile, CancellationToken cancellationToken = default)
+    /// <summary>关闭会话；至少保留一个会话（最后一个会话不允许关闭，只允许断开连接）。</summary>
+    public Result<string> CloseSession(string sessionId)
     {
-        await DisconnectAsync().ConfigureAwait(false);
+        var session = _sessions.FirstOrDefault(s => s.SessionId == sessionId);
+        if (session is null) return Result<string>.Ok("会话已不存在");
 
-        var options = new SessionOptions
+        if (_sessions.Count <= 1)
         {
-            SessionId = Guid.NewGuid().ToString("N")[..8],
-            Name = profile.Name,
-            ResponseTimeoutMs = profile.ResponseTimeoutMs,
-            RetryCount = profile.RetryCount,
-            SuppressEcho = false,
-            IsSerial = false
-        };
-
-        var channel = new TcpChannel(profile.ToTcpSettings());
-        var session = new ModbusSession(channel, new ModbusTcpCodec(), options, _observer);
-
-        try
-        {
-            await session.ConnectAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (CommException ex)
-        {
-            _log.Error("Session", $"TCP 连接失败：{ex.Error.Message}", ex);
-            await session.DisposeAsync().ConfigureAwait(false);
-            return Result<string>.Fail(ex.Error);
+            return Result<string>.Fail(new ErrorInfo(
+                ErrorCodes.ValidationBadInput, ErrorCategory.Validation, Severity.Warning,
+                "至少需要保留一个会话。",
+                Hint: "如需停止通信，请在“连接中心”断开连接；也可以先新建一个会话再关闭当前会话。"));
         }
 
-        _session = session;
-        _tcpProfile = profile;
-        _serialProfile = null;
-        Kind = ConnectionKind.Tcp;
-        DefaultUnitId = profile.UnitId;
-        Snapshot = new ConnectionSnapshot(ConnectionKind.Tcp, $"{profile.Host}:{profile.Port}", session.Codec.Name,
-            $"Unit ID {profile.UnitId} · 超时 {profile.ResponseTimeoutMs} ms · 重试 {profile.RetryCount}",
-            profile.UnitId);
+        _sessions.Remove(session);
+        _ = session.DisposeAsync();
 
-        _log.Info("Session", $"TCP 已连接：{profile.Host}:{profile.Port}，Unit ID {profile.UnitId}", session.SessionId);
-        CurrentChanged?.Invoke(this, EventArgs.Empty);
-        return Result<string>.Ok(StatusText);
+        if (ReferenceEquals(_active, session))
+        {
+            _active = _sessions[0];
+        }
+
+        SessionsChanged?.Invoke(this, EventArgs.Empty);
+        _log.Info("Session", $"已关闭会话「{session.Name}」（{sessionId}），当前会话数 {_sessions.Count}");
+        return Result<string>.Ok($"已关闭会话「{session.Name}」");
     }
 
-    public async Task DisconnectAsync()
+    public void Activate(string sessionId)
     {
-        var session = _session;
+        var session = _sessions.FirstOrDefault(s => s.SessionId == sessionId);
         if (session is null) return;
 
-        _session = null;
-        Kind = ConnectionKind.None;
-        Snapshot = null;
-        _log.Info("Session", $"断开连接：{session.Channel.Endpoint}", session.SessionId);
-        await session.DisposeAsync().ConfigureAwait(false);
-        CurrentChanged?.Invoke(this, EventArgs.Empty);
+        _active = session;
+        session.Touch();
+        SessionsChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>把发现的地址设为默认 Unit ID（扫描页与连接中心共用）。</summary>
-    public void SetDefaultUnitId(byte unitId)
+    public void RenameSession(string sessionId, string name)
     {
-        DefaultUnitId = unitId;
-        if (Snapshot is { Kind: ConnectionKind.Tcp } snapshot)
-        {
-            Snapshot = snapshot with { UnitId = unitId };
-        }
+        _sessions.FirstOrDefault(s => s.SessionId == sessionId)?.Rename(name);
+        SessionsChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    // ------------------------------------------------- R-11 串口参数扫描：重配与恢复
-
-    /// <summary>参数扫描是否需要串口重配；TCP 会话返回 false。</summary>
-    public bool CanReconfigure => Kind == ConnectionKind.Serial && IsConnected && _originalSerialProfile is not null;
-
-    /// <summary>扫描前的原始串口参数（用于恢复与界面显示“原 4800-8-N-1”）。</summary>
-    public SerialSettings? OriginalSettings => _originalSerialProfile?.ToSerialSettings();
-
-    /// <summary>当前实际打开的串口参数（扫描期间会随组合变化）。</summary>
-    public SerialSettings? ActiveSettings => _serialProfile?.ToSerialSettings();
-
-    /// <summary>
-    /// 切换到指定串口参数。更换参数 = 关串口 + 重开 + 清缓冲；失败返回 null（已记日志）。
-    /// 调用方负责在四个终态调用 <see cref="RestoreAsync"/>。
-    /// </summary>
-    public async Task<ModbusSession?> ApplyAsync(SerialSettings settings, int settleMs, CancellationToken cancellationToken)
+    /// <summary>设置变化后同步（会话上限、监视显示选项下发到所有会话）。</summary>
+    public void ApplySettings(AppSettings settings)
     {
-        var original = _originalSerialProfile;
-        if (original is null)
-        {
-            _log.Warning("Session", "参数扫描：没有可用的原始串口配置，无法切换参数");
-            return null;
-        }
-
-        var profile = original with
-        {
-            PortName = settings.PortName,
-            BaudRate = settings.BaudRate,
-            DataBits = settings.DataBits,
-            Parity = settings.Parity,
-            StopBits = settings.StopBits
-        };
-
-        var result = await OpenSerialAsync(profile, _originalSilenceThresholdMs, cancellationToken).ConfigureAwait(false);
-        if (!result.IsSuccess)
-        {
-            _log.Warning("Session",
-                $"参数扫描：切换到 {settings.PortName} {settings.BaudRate},{settings.DataBits}," +
-                $"{SerialSettings.ParityCode(settings.Parity)},{SerialSettings.StopBitsCode(settings.StopBits)} 失败：" +
-                (result.Error?.Message ?? "未知原因"));
-            return null;
-        }
-
-        // USB 转串口重开后需要稳定等待（可配，默认 150 ms）。
-        await Task.Delay(Math.Clamp(settleMs, 0, 5000), cancellationToken).ConfigureAwait(false);
-        return _session;
+        _settings = settings;
+        foreach (var session in _sessions) session.Monitor.ApplySettings(settings.Monitor);
+        SessionsChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>恢复到扫描前的原始参数；恢复失败时明确置为“未连接”，不静默停留在错误参数。</summary>
-    public async Task<SerialRestoreResult> RestoreAsync(CancellationToken cancellationToken)
+    /// <summary>把监视显示选项下发给所有会话的监视投影（设置页保存时调用）。</summary>
+    public void ApplyMonitorSettings(MonitorSettings settings)
     {
-        var original = _originalSerialProfile;
-        if (original is null) return SerialRestoreResult.Ok;
+        foreach (var session in _sessions) session.Monitor.ApplySettings(settings);
+    }
 
-        try
-        {
-            // 取消路径也必须恢复，因此不受外部令牌影响，只给自己一个超时。
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
-            var result = await OpenSerialAsync(original, _originalSilenceThresholdMs, timeout.Token).ConfigureAwait(false);
-            if (result.IsSuccess)
-            {
-                _log.Info("Session",
-                    $"已恢复原串口参数：{original.PortName} {original.BaudRate},{original.DataBits}," +
-                    $"{SerialSettings.ParityCode(original.Parity)},{SerialSettings.StopBitsCode(original.StopBits)}");
-                return SerialRestoreResult.Ok;
-            }
+    private void OnSessionStateChanged(string sessionId, string? name) => SessionsChanged?.Invoke(this, EventArgs.Empty);
 
-            await DisconnectAsync().ConfigureAwait(false);
-            return new SerialRestoreResult(false, result.Error?.Message ?? "恢复原串口参数失败");
-        }
-        catch (Exception ex)
+    /// <summary>停止所有会话的监视表周期刷新（退出流程使用，见规划 13.9）。</summary>
+    public void StopAllWatchLists(string reason)
+    {
+        foreach (var session in _sessions)
         {
-            _log.Error("Session", "恢复原串口参数时异常", ex);
             try
             {
-                await DisconnectAsync().ConfigureAwait(false);
+                if (session.WatchList.IsRunning) session.WatchList.Stop(reason);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // 已尽力断开；不掩盖原始错误
+                _log.Warning("Session", $"停止会话「{session.Name}」监视表时异常：{ex.Message}");
             }
-            return new SerialRestoreResult(false, ex.Message);
         }
     }
 
-    // ---------------------------------------------------------------- 服务工厂
+    // ------------------------------------------------------------------------------------------
+    // 兼容转发（等价于 Active.*）。新代码请直接用 SessionContext，见类注释。
+    // ------------------------------------------------------------------------------------------
 
-    public DeviceScanService? CreateDeviceScanService() => _session is null ? null : new DeviceScanService(_session);
+    public ModbusSession? Current => _active.Current;
+    public ConnectionKind Kind => _active.Kind;
+    public bool IsConnected => _active.IsConnected;
+    public bool IsSerialConnected => _active.IsSerialConnected;
+    public bool IsTcpConnected => _active.IsTcpConnected;
+    public ConnectionSnapshot? Snapshot => _active.Snapshot;
+    public int SilenceThresholdMs => _active.SilenceThresholdMs;
+    public string StatusText => _active.StatusText;
 
-    public DataScanService? CreateDataScanService() => _session is null ? null : new DataScanService(_session);
-
-    public RegisterLocator? CreateRegisterLocator() => _session is null ? null : new RegisterLocator(_session);
-
-    public WatchTableService? CreateWatchTableService() => _session is null ? null : new WatchTableService(_session);
-
-    /// <summary>会话版手动报文服务（沿用当前会话编解码器）。</summary>
-    public ManualSendService? CreateManualSendService() => _session is null ? null : new ManualSendService(_session);
-
-    /// <summary>
-    /// 按显式协议选择构建报文服务（R-19）：未连接时也能生成与校验报文，只有发送需要活动会话。
-    /// </summary>
-    public ManualSendService CreateManualSendService(FrameTransport transport, int silenceThresholdMs = 5)
+    public byte DefaultUnitId
     {
-        var codec = transport switch
-        {
-            FrameTransport.Rtu => new ModbusRtuCodec(Math.Max(1, silenceThresholdMs)),
-            FrameTransport.Tcp => new ModbusTcpCodec(),
-            _ => _session?.Codec ?? new ModbusRtuCodec(Math.Max(1, silenceThresholdMs))
-        };
-
-        return new ManualSendService(codec, _session);
+        get => _active.DefaultUnitId;
+        set => _active.DefaultUnitId = value;
     }
 
-    /// <summary>局域网扫描使用的 Modbus 识别委托：为每台主机建立一次临时 TCP 会话，只发一次只读请求。</summary>
-    public ModbusIdentifyDelegate CreateLanIdentifyDelegate() => async (ip, port, unitId, cancellationToken) =>
+    public event EventHandler? CurrentChanged
     {
-        var options = new SessionOptions
-        {
-            SessionId = Guid.NewGuid().ToString("N")[..8],
-            Name = "局域网识别",
-            ResponseTimeoutMs = 800,
-            RetryCount = 0,
-            SuppressEcho = false,
-            IsSerial = false
-        };
+        add => _active.Changed += value;
+        remove => _active.Changed -= value;
+    }
 
-        var channel = new TcpChannel(new TcpSettings { Host = ip, Port = port, ConnectTimeoutMs = 800 });
-        var session = new ModbusSession(channel, new ModbusTcpCodec(), options, _observer);
+    public Task<Result<string>> ConnectSerialAsync(SerialProfile profile, int silenceThresholdMs,
+        CancellationToken cancellationToken = default) =>
+        _active.ConnectSerialAsync(profile, silenceThresholdMs, cancellationToken);
 
-        try
-        {
-            await session.ConnectAsync(cancellationToken).ConfigureAwait(false);
+    public Task<Result<string>> ConnectTcpAsync(TcpProfile profile, CancellationToken cancellationToken = default) =>
+        _active.ConnectTcpAsync(profile, cancellationToken);
 
-            var result = await session.ExecuteAsync(
-                ModbusRequest.Scan(unitId, ModbusRequests.Read(DataArea.HoldingRegisters, 0, 1)),
-                cancellationToken).ConfigureAwait(false);
+    public Task DisconnectAsync() => _active.DisconnectAsync();
 
-            return result.Status switch
-            {
-                ExchangeStatus.Ok => "读保持寄存器成功",
-                ExchangeStatus.ModbusException =>
-                    $"异常响应 0x{result.ExceptionCode:X2}（{ModbusExceptions.Describe(result.ExceptionCode ?? 0)}）",
-                _ => null
-            };
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-        finally
-        {
-            await session.DisposeAsync().ConfigureAwait(false);
-        }
-    };
+    public void SetDefaultUnitId(byte unitId) => _active.SetDefaultUnitId(unitId);
 
-    /// <summary>幂等释放：容器释放与手工释放都可能调用（见 M1 反馈问题 5/10）。</summary>
+    public bool CanReconfigure => _active.CanReconfigure;
+    public SerialSettings? OriginalSettings => _active.OriginalSettings;
+    public SerialSettings? ActiveSettings => _active.ActiveSettings;
+
+    public Task<ModbusSession?> ApplyAsync(SerialSettings settings, int settleMs, CancellationToken cancellationToken) =>
+        _active.ApplyAsync(settings, settleMs, cancellationToken);
+
+    public Task<SerialRestoreResult> RestoreAsync(CancellationToken cancellationToken) =>
+        _active.RestoreAsync(cancellationToken);
+
+    public DeviceScanService? CreateDeviceScanService() => _active.CreateDeviceScanService();
+    public DataScanService? CreateDataScanService() => _active.CreateDataScanService();
+    public RegisterLocator? CreateRegisterLocator() => _active.CreateRegisterLocator();
+    public WatchTableService? CreateWatchTableService() => _active.CreateWatchTableService();
+    public ManualSendService? CreateManualSendService() => _active.CreateManualSendService();
+
+    public ManualSendService CreateManualSendService(FrameTransport transport, int silenceThresholdMs = 5) =>
+        _active.CreateManualSendService(transport, silenceThresholdMs);
+
+    public ModbusIdentifyDelegate CreateLanIdentifyDelegate() => _active.CreateLanIdentifyDelegate();
+
+    /// <summary>会话占用摘要（诊断/任务中心）。</summary>
+    public string DescribeSessions() =>
+        $"{_sessions.Count}/{MaxSessions} 个会话：" +
+        string.Join("；", _sessions.Select(s => $"{s.Name}{(ReferenceEquals(s, _active) ? "（活动）" : string.Empty)}={s.StatusText}")) +
+        $"。串口占用：{_ports.Describe()}";
+
+    /// <summary>幂等释放：关闭全部会话（见 M1 反馈问题 5/10）。</summary>
     public async ValueTask DisposeAsync()
     {
         if (_disposed) return;
         _disposed = true;
-        await DisconnectAsync().ConfigureAwait(false);
+
+        foreach (var session in _sessions.ToArray())
+        {
+            try
+            {
+                await session.DisposeAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _log.Warning("Session", $"关闭会话「{session.Name}」时异常：{ex.Message}");
+            }
+        }
+
+        _sessions.Clear();
     }
 }

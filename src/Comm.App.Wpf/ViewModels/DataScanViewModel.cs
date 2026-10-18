@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows.Data;
 using Comm.App.Wpf.Services;
@@ -12,22 +12,24 @@ using CommunityToolkit.Mvvm.Input;
 namespace Comm.App.Wpf.ViewModels;
 
 /// <summary>数据区扫描（见规划 4.3）。</summary>
-public partial class DataScanViewModel : ObservableObject
+public partial class DataScanViewModel : ObservableObject, IDisposable
 {
     private const string ScanPlanKind = ScanPlanKinds.Data;
 
     private readonly AppServices _app;
+    private readonly SessionContext _session;
     private CancellationTokenSource? _cts;
     private PauseGate? _gate;
 
-    public DataScanViewModel(AppServices app)
+    public DataScanViewModel(AppServices app, SessionContext session)
     {
         _app = app;
+        _session = session;
         var scan = app.Settings.Scan;
         _area = scan.DefaultArea;
         _dataType = scan.DefaultDataType;
         _byteOrder = scan.DefaultByteOrder;
-        _unitId = app.Sessions.DefaultUnitId;
+        _unitId = _session.DefaultUnitId;
 
         ItemsView = CollectionViewSource.GetDefaultView(Items);
         ItemsView.Filter = o =>
@@ -111,7 +113,7 @@ public partial class DataScanViewModel : ObservableObject
     [RelayCommand]
     private async Task StartAsync()
     {
-        var service = _app.Sessions.CreateDataScanService();
+        var service = _session.CreateDataScanService();
         if (service is null)
         {
             _app.Dialogs.Warn("尚未连接", "请先在“连接中心”打开串口或连接 TCP。");
@@ -284,7 +286,7 @@ public partial class DataScanViewModel : ObservableObject
             return;
         }
 
-        _app.WatchList.Add(new RegisterPoint
+        _session.WatchList.Add(new RegisterPoint
         {
             Name = $"{SelectedItem.Area.ToShortChinese()} {SelectedItem.Address}",
             UnitId = UnitId,
@@ -297,7 +299,7 @@ public partial class DataScanViewModel : ObservableObject
             Note = "来自数据扫描"
         });
 
-        StatusMessage = _app.WatchList.StatusMessage;
+        StatusMessage = _session.WatchList.StatusMessage;
     }
 
     // ---------------------------------------------------------------- 扫描方案（规划 4.12）
@@ -410,4 +412,13 @@ public partial class DataScanViewModel : ObservableObject
                    $"说明：{SelectedItem.Note}";
         _app.Dialogs.ShowText("点位详情", text);
     }
+
+    // ---------------------------------------------------------------- 释放（M3b：页面属于某个会话）
+
+    /// <summary>关闭会话时由工作区调用。本页没有长期订阅，保留方法以便统一释放。</summary>
+    public void Dispose()
+    {
+        // 无长期订阅（扫描服务由每次操作临时创建）
+    }
+
 }

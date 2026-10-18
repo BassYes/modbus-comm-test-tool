@@ -1,5 +1,6 @@
 using Comm.Core.Codecs;
 using Comm.Core.Frames;
+using System.Text.Json.Serialization;
 
 namespace Comm.Plugins.Abstractions;
 
@@ -24,6 +25,17 @@ public sealed record PluginManifest
 
     /// <summary>需要的系统权限描述，如 "网卡配置"。</summary>
     public string? RequiredPrivilege { get; init; }
+
+    /// <summary>
+    /// 入口程序集文件名（相对插件目录），如 <c>Comm.Plugin.Sample.dll</c>（M3b，规划 AD-13）。
+    /// 缺省时宿主会在插件目录中查找唯一的 <see cref="ICommPlugin"/> 实现。
+    /// </summary>
+    [JsonPropertyName("entry")]
+    public string? EntryAssembly { get; init; }
+
+    /// <summary>入口类型全名（可选）；缺省时按 <see cref="ICommPlugin"/> 自动查找。</summary>
+    [JsonPropertyName("type")]
+    public string? EntryType { get; init; }
 }
 
 public enum PluginCapability

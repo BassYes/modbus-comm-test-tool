@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Comm.Plugins.Host</RootNamespace>
+    <AssemblyName>Comm.Plugins.Host</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Comm.Core\Comm.Core.csproj" />
+    <ProjectReference Include="..\Comm.Plugins.Abstractions\Comm.Plugins.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

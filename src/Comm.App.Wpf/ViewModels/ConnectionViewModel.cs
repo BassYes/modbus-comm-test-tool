@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using Comm.App.Wpf.Services;
 using Comm.Core.Transport;
 using Comm.Network;
@@ -13,13 +13,15 @@ namespace Comm.App.Wpf.ViewModels;
 /// 连接中心（协议栈 L0 参数，见规划 4.1）。
 /// R-18 的两点改进：串口提供明确的“关闭串口”入口；连接后锁定参数编辑（避免界面值与实际链路不一致）。
 /// </summary>
-public partial class ConnectionViewModel : ObservableObject
+public partial class ConnectionViewModel : ObservableObject, IDisposable
 {
     private readonly AppServices _app;
+    private readonly SessionContext _session;
 
-    public ConnectionViewModel(AppServices app)
+    public ConnectionViewModel(AppServices app, SessionContext session)
     {
         _app = app;
+        _session = session;
 
         var serial = app.Settings.Serial;
         _selectedPort = serial.PortName;
@@ -41,10 +43,10 @@ public partial class ConnectionViewModel : ObservableObject
         RefreshPorts();
         RefreshTargets();
         UpdateStatus();
-        app.Sessions.CurrentChanged += (_, _) => UpdateStatus();
+        _session.Changed += OnSessionChanged;
 
         // R-11：设备扫描的“应用到连接中心”通过事件回填串口参数（并可选择立即重连）。
-        app.SerialParametersRequested += (_, request) => _ = ApplySerialParametersAsync(request);
+        _app.SerialParametersRequested += OnSerialParametersRequested;
     }
 
     /// <summary>把参数扫描得到的串口参数回填到界面，必要时立即重连。</summary>
@@ -129,7 +131,7 @@ public partial class ConnectionViewModel : ObservableObject
     {
         get
         {
-            var stats = _app.Sessions.Current?.Statistics;
+            var stats = _session.Current?.Statistics;
             return stats is null ? "尚无会话统计" : stats.ToStatusText();
         }
     }
@@ -204,7 +206,7 @@ public partial class ConnectionViewModel : ObservableObject
         _app.Update(s => s with { Serial = profile });
 
         Message = $"正在打开 {SerialSummary} …";
-        var result = await _app.Sessions.ConnectSerialAsync(profile, SilenceThresholdMs).ConfigureAwait(true);
+        var result = await _session.ConnectSerialAsync(profile, SilenceThresholdMs).ConfigureAwait(true);
         Message = result.IsSuccess ? "串口已连接。" : result.Error!.ToUserText();
         UpdateStatus();
     }
@@ -213,7 +215,7 @@ public partial class ConnectionViewModel : ObservableObject
     [RelayCommand]
     private async Task CloseSerialAsync()
     {
-        if (!_app.Sessions.IsSerialConnected)
+        if (!_session.IsSerialConnected)
         {
             Message = "当前没有打开的串口。";
             return;
@@ -225,7 +227,7 @@ public partial class ConnectionViewModel : ObservableObject
             return;
         }
 
-        await _app.Sessions.DisconnectAsync().ConfigureAwait(true);
+        await _session.DisconnectAsync().ConfigureAwait(true);
         Message = "串口已关闭。";
         _app.Log.Info("Session", "用户关闭串口");
         UpdateStatus();
@@ -254,7 +256,7 @@ public partial class ConnectionViewModel : ObservableObject
         _app.Update(s => s with { Tcp = profile });
 
         Message = $"正在连接 {TcpSummary} …";
-        var result = await _app.Sessions.ConnectTcpAsync(profile).ConfigureAwait(true);
+        var result = await _session.ConnectTcpAsync(profile).ConfigureAwait(true);
         Message = result.IsSuccess ? "TCP 已连接。" : result.Error!.ToUserText();
         UpdateStatus();
     }
@@ -262,7 +264,7 @@ public partial class ConnectionViewModel : ObservableObject
     [RelayCommand]
     private async Task DisconnectAsync()
     {
-        await _app.Sessions.DisconnectAsync().ConfigureAwait(true);
+        await _session.DisconnectAsync().ConfigureAwait(true);
         Message = "已断开连接。";
         UpdateStatus();
     }
@@ -270,7 +272,7 @@ public partial class ConnectionViewModel : ObservableObject
     [RelayCommand]
     private void ResetStatistics()
     {
-        _app.Sessions.Current?.Statistics.Reset();
+        _session.Current?.Statistics.Reset();
         _app.Log.Info("Session", "已清零会话统计");
         OnPropertyChanged(nameof(StatisticsText));
     }
@@ -349,15 +351,29 @@ public partial class ConnectionViewModel : ObservableObject
 
     private void UpdateStatus()
     {
-        IsConnected = _app.Sessions.IsConnected;
-        IsSerialConnected = _app.Sessions.IsSerialConnected;
-        IsTcpConnected = _app.Sessions.IsTcpConnected;
-        StatusText = _app.Sessions.StatusText;
-        ConnectionParamsText = _app.Sessions.Snapshot?.ShortText ?? "未连接";
+        IsConnected = _session.IsConnected;
+        IsSerialConnected = _session.IsSerialConnected;
+        IsTcpConnected = _session.IsTcpConnected;
+        StatusText = _session.StatusText;
+        ConnectionParamsText = _session.Snapshot?.ShortText ?? "未连接";
 
         OnPropertyChanged(nameof(StatisticsText));
         OnPropertyChanged(nameof(IsSerialParametersEnabled));
         OnPropertyChanged(nameof(IsTcpParametersEnabled));
         OnPropertyChanged(nameof(CanRefreshPorts));
+    }
+
+    // ---------------------------------------------------------------- 会话事件与释放（M3b：页面属于某个会话）
+
+    private void OnSessionChanged(object? sender, EventArgs e) => UpdateStatus();
+
+    private void OnSerialParametersRequested(object? sender, ApplySerialParametersRequest request) =>
+        _ = ApplySerialParametersAsync(request);
+
+    /// <summary>关闭会话时由工作区调用：解除订阅，避免已关闭会话继续收到全局事件。</summary>
+    public void Dispose()
+    {
+        _session.Changed -= OnSessionChanged;
+        _app.SerialParametersRequested -= OnSerialParametersRequested;
     }
 }

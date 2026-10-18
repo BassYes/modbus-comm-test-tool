@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using Comm.Core.Errors;
 using Comm.Protocols.Modbus;
@@ -49,6 +49,18 @@ public sealed class DialogService
             FileName = defaultFileName,
             AddExtension = true,
             OverwritePrompt = true
+        };
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    }
+
+    /// <summary>打开文件对话框（M3b：导入工作区/项目文件等）。取消时返回 null。</summary>
+    public string? OpenFile(string title, string filter)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = title,
+            Filter = filter,
+            CheckFileExists = true
         };
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     }

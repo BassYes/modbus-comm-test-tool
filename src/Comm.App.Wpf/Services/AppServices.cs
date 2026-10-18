@@ -15,8 +15,6 @@ public sealed class AppServices
         CrashReporter crashes,
         FrameBus frameBus,
         SessionManager sessions,
-        MonitorService monitor,
-        WatchListService watchList,
         DialogService dialogs,
         TaskStatusService tasks)
     {
@@ -26,8 +24,6 @@ public sealed class AppServices
         Crashes = crashes;
         FrameBus = frameBus;
         Sessions = sessions;
-        Monitor = monitor;
-        WatchList = watchList;
         Dialogs = dialogs;
         Tasks = tasks;
     }
@@ -38,10 +34,12 @@ public sealed class AppServices
     public CrashReporter Crashes { get; }
     public FrameBus FrameBus { get; }
     public SessionManager Sessions { get; }
-    public MonitorService Monitor { get; }
 
-    /// <summary>监视表（跨页面共享：数据扫描 / 寄存器定位都能“加入监视表”）。</summary>
-    public WatchListService WatchList { get; }
+    /// <summary>当前活动会话的报文监视投影（M3b：监视按会话隔离，各自只显示自己的报文）。</summary>
+    public MonitorService Monitor => Sessions.Active.Monitor;
+
+    /// <summary>当前活动会话的监视表（M3b：监视表也是会话作用域的）。</summary>
+    public WatchListService WatchList => Sessions.Active.WatchList;
 
     public DialogService Dialogs { get; }
     public TaskStatusService Tasks { get; }
@@ -58,7 +56,10 @@ public sealed class AppServices
     public string SaveSettings(AppSettings settings)
     {
         Settings = settings;
-        return Store.Save(settings) ?? string.Empty;
+        var error = Store.Save(settings);
+        // 会话上限与监视显示选项需要在运行时立即生效（M3b）。
+        Sessions.ApplySettings(settings);
+        return error ?? string.Empty;
     }
 
     /// <summary>修改设置并立即保存；返回空字符串表示成功，否则为错误信息。</summary>

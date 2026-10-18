@@ -1,4 +1,4 @@
-# 构建环境与自检说明（开发备忘）
+﻿# 构建环境与自检说明（开发备忘）
 
 ## 1. 工具链
 
@@ -20,10 +20,30 @@ $DOTNET run --project src/Comm.App.Wpf
 | 标准 VSTest | `$DOTNET test CommTestTool.sln` | 在装有 VS/正常桌面环境时使用；本机受限环境下 testhost 会以 `Win32Exception (5)` 中止 |
 
 新增测试项目后需把它加入 `tests/Comm.TestRunner/Program.cs` 的 `assemblies` 数组，本地运行器才会执行。
+也可以临时运行未登记的测试程序集（并行开发自检用）：
+
+```
+$DOTNET run --project tests/Comm.TestRunner -- --assembly=tests/<项目>/bin/Debug/net8.0/<项目>.dll [--filter=名称片段]
+```
+
+M3 交付后登记的程序集：`Comm.Protocols.Modbus.Tests`、`Comm.Session.Tests`、`Comm.Scanning.Tests`、
+`Comm.Network.Tests`、`Comm.Infrastructure.Tests`、`Comm.Platform.Windows.Tests`、`Comm.NetConfigHelper.Tests`、
+`Comm.Plugins.Host.Tests`、`Comm.Architecture.Tests`（共 403 个用例）。
+
+## 2.1 多会话验收探针（M3b）
+
+```
+$DOTNET run --project tools/Comm.SessionProbe          # 23 项，全部通过则退出码 0
+$DOTNET run --project tools/Comm.SessionProbe -- --verbose
+```
+
+探针使用**进程内 Modbus TCP 从站模拟器 + 回环地址**，不打开真实串口、不改动任何系统配置。
 
 ## 3. 界面自检
 
-- `CommTestTool.exe --page=N`：启动时直接打开第 N 个功能页（1=连接中心 … 10=设置与日志）。
+- `CommTestTool.exe --page=N`：启动时直接打开第 N 个功能页
+  （会话页：1=连接中心、2=设备扫描、3=数据扫描、4=寄存器定位、5=监视表、6=报文工具、7=报文监视；
+  全局页：8=网络工具、9=局域网扫描、**10=扩展中心**、11=设置与日志。M3b 起列表随会话工作区动态生成）。
 - `bash docs/capture-pages.sh`：依次打开各页并截图到 `docs/`（脚本会强杀进程，之后自动删除 `data/.running`）。
 - `bash docs/capture-pages.sh --min`：把窗口改为 **900×480**（最小可用尺寸）后逐页截图，用于 B-01 验收。
 - `bash docs/capture-pages.sh --pages 2,8`：只截指定页。
@@ -47,7 +67,10 @@ M2.5（R-21 X-2）起，**数据目录由 `Comm.Diagnostics.AppPaths` 统一解�
 | `captures/` | 报文记录（JSONL） |
 | `logs/debug-*.log` | Debug 日志（默认关闭时不产生文件） |
 | `logs/crash-*.log` | 崩溃报告（不受日志开关控制，可单独关闭） |
+| `data/netsnap/*.json` | 网卡配置快照（M3a：应用前自动保存，最多 20 份，可一键恢复） |
 | `<程序目录>/exports/` | 导出文件默认目录 |
+| `<程序目录>/plugins/` | **插件受信目录**（M3b：只加载这里的插件，见 AD-13） |
+| `<程序目录>/helper/` | **网卡配置提权助手**（M3a：`Comm.NetConfigHelper.exe`，按需 UAC 拉起） |
 
 强制结束进程后请删除 `data/.running`，否则下次启动会弹出“上次运行异常退出”提示（这是预期行为，不是缺陷）。
 
@@ -60,8 +83,18 @@ M2.5（R-21 X-2）起，**数据目录由 `Comm.Diagnostics.AppPaths` 统一解�
 ## 4.2 发布（X-1）
 
 ```powershell
-.	ools\Publish-App.ps1                 # Release + 自包含 win-x64 → artifacts\publish
-.	ools\Publish-App.ps1 -Sign -Zip      # 追加签名与便携包
+.\tools\Publish-App.ps1                               # Release + 自包含 win-x64 → artifacts\publish
+.\tools\Publish-App.ps1 -Sign -Zip                    # 追加签名与便携包
+.\tools\Publish-App.ps1 -WithSamplePlugin             # 额外把参考示例插件装进 plugins\Sample
+```
+
+M3 起发布脚本会额外产出：
+
+```
+artifacts\publish\
+  CommTestTool.exe                 主程序（普通权限）
+  helper\Comm.NetConfigHelper.exe 网卡配置提权助手（UAC，必须与主程序一起签名）
+  plugins\                        插件受信目录（含“插件目录说明.txt”）
 ```
 
 **不要把 `bin/Debug` 直接拷到现场**：里面有 pdb 与中间文件，且经网络/U 盘搬运后容易带上 MOTW 标记而触发安全警告。

@@ -1,4 +1,4 @@
-using Comm.App.Wpf.Services;
+﻿using Comm.App.Wpf.Services;
 using Comm.Core;
 using Comm.Core.Frames;
 using Comm.Protocols.Modbus;
@@ -8,19 +8,21 @@ using CommunityToolkit.Mvvm.Input;
 namespace Comm.App.Wpf.ViewModels;
 
 /// <summary>实时报文监视（见规划 4.6）。</summary>
-public partial class MonitorViewModel : ObservableObject
+public partial class MonitorViewModel : ObservableObject, IDisposable
 {
     private readonly AppServices _app;
+    private readonly SessionContext _session;
 
-    public MonitorViewModel(AppServices app)
+    public MonitorViewModel(AppServices app, SessionContext session)
     {
         _app = app;
-        app.Monitor.PropertyChanged += (_, _) => RefreshStatus();
-        app.Monitor.RowsChanged += (_, _) => RefreshStatus();
+        _session = session;
+        _session.Monitor.PropertyChanged += OnMonitorPropertyChanged;
+        _session.Monitor.RowsChanged += OnMonitorRowsChanged;
         RefreshStatus();
     }
 
-    public MonitorService Monitor => _app.Monitor;
+    public MonitorService Monitor => _session.Monitor;
 
     public IReadOnlyList<Option<DirectionFilter>> DirectionOptions { get; } = new[]
     {
@@ -171,4 +173,18 @@ public partial class MonitorViewModel : ObservableObject
         _app.Dialogs.ShowText("报文详情",
             BuildDetail(SelectedRecord) + "\n\n提示：可在“报文工具”页粘贴该报文再次发送；若为写操作会再次要求确认。");
     }
+
+    // ---------------------------------------------------------------- 监视事件与释放（M3b：监视按会话隔离）
+
+    private void OnMonitorPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => RefreshStatus();
+
+    private void OnMonitorRowsChanged(object? sender, EventArgs e) => RefreshStatus();
+
+    /// <summary>关闭会话时由工作区调用：解除本会话监视投影的订阅。</summary>
+    public void Dispose()
+    {
+        _session.Monitor.PropertyChanged -= OnMonitorPropertyChanged;
+        _session.Monitor.RowsChanged -= OnMonitorRowsChanged;
+    }
+
 }

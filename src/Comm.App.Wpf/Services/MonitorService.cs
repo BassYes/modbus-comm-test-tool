@@ -27,15 +27,31 @@ public partial class MonitorService : ObservableObject
     private readonly LogGate _log;
     private long _uiIndex = -1;
 
-    public MonitorService(FrameBus bus, LogGate log, AppSettings settings)
+    public MonitorService(FrameBus bus, LogGate log, AppSettings settings, string? sessionIdFilter = null)
     {
         _bus = bus;
         _log = log;
+        SessionIdFilter = sessionIdFilter;
         ParseEnabled = bus.ParseEnabled;
         UiCapacity = Math.Max(1000, settings.Monitor.UiCapacity);
         ColorizeDirections = settings.Monitor.ColorizeDirections;
         AutoScroll = settings.Monitor.AutoScroll;
         bus.FramesAppended += OnFramesAppended;
+    }
+
+    /// <summary>
+    /// 会话过滤（M3b）：只投影本会话的报文（<see cref="FrameRecord.SessionId"/>），
+    /// 两个窗口各自监视自己的会话，统计与结果不串会话（规划 21.2.2 第 3 点）。null = 不过滤。
+    /// </summary>
+    public string? SessionIdFilter { get; set; }
+
+    /// <summary>按设置页的监视选项刷新本实例（设置页改动后由 SessionManager 统一下发）。</summary>
+    public void ApplySettings(MonitorSettings settings)
+    {
+        UiCapacity = Math.Max(1000, settings.UiCapacity);
+        ColorizeDirections = settings.ColorizeDirections;
+        AutoScroll = settings.AutoScroll;
+        while (Rows.Count > UiCapacity) Rows.RemoveAt(0);
     }
 
     /// <summary>界面显示的行数上限（M1 欠账 D-3：原为硬编码常量，现可在设置页调整）。</summary>
@@ -52,6 +68,9 @@ public partial class MonitorService : ObservableObject
 
     public long TotalCount => _bus.TotalCount;
     public long DroppedFromDisplay => _bus.DroppedFromDisplay;
+
+    /// <summary>本会话（按 <see cref="SessionIdFilter"/> 过滤后）已投递到界面的条数。</summary>
+    public long MatchedCount { get; private set; }
 
     [ObservableProperty]
     private bool _displayPaused;
@@ -127,7 +146,9 @@ public partial class MonitorService : ObservableObject
         _bus.Clear();
         Rows.Clear();
         _uiIndex = _bus.LastIndex;
+        MatchedCount = 0;
         OnPropertyChanged(nameof(TotalCount));
+        OnPropertyChanged(nameof(MatchedCount));
         RowsChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -169,18 +190,26 @@ public partial class MonitorService : ObservableObject
         foreach (var record in records)
         {
             if (!Matches(record)) continue;
+            MatchedCount++;
             Rows.Add(record);
         }
 
         while (Rows.Count > UiCapacity) Rows.RemoveAt(0);
 
         OnPropertyChanged(nameof(TotalCount));
+        OnPropertyChanged(nameof(MatchedCount));
         OnPropertyChanged(nameof(DroppedFromDisplay));
         RowsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public bool Matches(FrameRecord record)
     {
+        if (SessionIdFilter is { Length: > 0 } filter &&
+            !string.Equals(record.SessionId, filter, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
         switch (DirectionFilter)
         {
             case DirectionFilter.TxOnly when record.Direction != FrameDirection.Tx: return false;

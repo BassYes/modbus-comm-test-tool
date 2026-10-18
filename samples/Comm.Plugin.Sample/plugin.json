@@ -1,0 +1,12 @@
+{
+  "id": "sample-plugin",
+  "name": "示例插件（报文解析 + 导出）",
+  "version": "1.0.0",
+  "author": "通讯测试工具项目组",
+  "description": "M3b 参考插件：演示扩展点注册（IFrameParser + 导出格式），只读、不执行任何写操作。可作为编写自有插件的模板。",
+  "hostVersionRange": ">=0.2.0",
+  "capabilities": ["FrameParser", "ExportFormat"],
+  "mayWrite": false,
+  "entry": "Comm.Plugin.Sample.dll",
+  "type": "Comm.Plugin.Sample.SamplePlugin"
+}

@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Comm.Plugin.Sample</RootNamespace>
+    <AssemblyName>Comm.Plugin.Sample</AssemblyName>
+    <!-- 示例插件：只依赖对外扩展契约；宿主用独立 AssemblyLoadContext 加载，
+         因此契约程序集不随插件复制（由宿主从默认上下文解析，保证类型标识一致）。 -->
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Comm.Plugins.Abstractions\Comm.Plugins.Abstractions.csproj" Private="false" />
+    <ProjectReference Include="..\..\src\Comm.Core\Comm.Core.csproj" Private="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- 插件清单必须随程序集一起出现在插件目录里（宿主按它发现/校验插件）。 -->
+    <None Update="plugin.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

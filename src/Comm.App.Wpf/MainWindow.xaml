@@ -1,45 +1,10 @@
 <Window x:Class="Comm.App.Wpf.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="clr-namespace:Comm.App.Wpf.ViewModels"
-        xmlns:views="clr-namespace:Comm.App.Wpf.Views"
         Title="{Binding VersionTitle}"
         Height="780" Width="1180" MinWidth="900" MinHeight="480"
         WindowStartupLocation="CenterScreen" WindowState="Maximized"
         FontFamily="{StaticResource UiFont}" FontSize="13">
-
-    <Window.Resources>
-        <DataTemplate DataType="{x:Type vm:ConnectionViewModel}">
-            <views:ConnectionView />
-        </DataTemplate>
-        <DataTemplate DataType="{x:Type vm:DeviceScanViewModel}">
-            <views:DeviceScanView />
-        </DataTemplate>
-        <DataTemplate DataType="{x:Type vm:DataScanViewModel}">
-            <views:DataScanView />
-        </DataTemplate>
-        <DataTemplate DataType="{x:Type vm:RegisterLocatorViewModel}">
-            <views:RegisterLocatorView />
-        </DataTemplate>
-        <DataTemplate DataType="{x:Type vm:WatchTableViewModel}">
-            <views:WatchTableView />
-        </DataTemplate>
-        <DataTemplate DataType="{x:Type vm:ManualSendViewModel}">
-            <views:ManualSendView />
-        </DataTemplate>
-        <DataTemplate DataType="{x:Type vm:MonitorViewModel}">
-            <views:MonitorView />
-        </DataTemplate>
-        <DataTemplate DataType="{x:Type vm:NetworkToolsViewModel}">
-            <views:NetworkToolsView />
-        </DataTemplate>
-        <DataTemplate DataType="{x:Type vm:LanScanViewModel}">
-            <views:LanScanView />
-        </DataTemplate>
-        <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
-            <views:SettingsView />
-        </DataTemplate>
-    </Window.Resources>
 
     <DockPanel>
         <!-- 顶部：全局工具栏与日志开关 -->
@@ -61,6 +26,42 @@
                     <TextBlock Text="Debug 日志" Foreground="#E8EEF5" VerticalAlignment="Center" Margin="0,0,6,0" />
                     <CheckBox IsChecked="{Binding LogEnabled}" Foreground="White" VerticalAlignment="Center"
                               ToolTip="打开后会在程序同级目录生成日志文件（可在设置页修改目录与滚动策略）" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 会话标签栏（M3b R-16）：多会话工作区 + 拆分/移回/新建/关闭 -->
+        <Border DockPanel.Dock="Top" Background="#EEF2F6" BorderBrush="#D6D6DC" BorderThickness="0,0,0,1" Padding="8,4">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <ListBox Grid.Column="0" ItemsSource="{Binding Workspaces}" SelectedItem="{Binding ActiveWorkspace}"
+                         Background="Transparent" BorderThickness="0" HorizontalAlignment="Left"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="2,1">
+                                <TextBlock Text="{Binding Title}" VerticalAlignment="Center" Margin="4,0" />
+                                <TextBlock Text="已拆分" Foreground="#1B5E9B" FontSize="11" VerticalAlignment="Center"
+                                           Visibility="{Binding IsDetached, Converter={StaticResource BoolToVisibility}}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Content="新建会话" Command="{Binding NewSessionCommand}" />
+                    <Button Content="拆分到新窗口" Command="{Binding SplitSessionCommand}" />
+                    <Button Content="移回主窗口" Command="{Binding ReturnSessionCommand}" />
+                    <Button Content="关闭会话" Command="{Binding CloseSessionCommand}" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -92,17 +93,19 @@
                 <Grid Grid.Row="1" Margin="0,2,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="{Binding ConnectionParamsText}" Foreground="#1B5E9B"
+                    <TextBlock Grid.Column="0" Text="{Binding SessionText}" Foreground="#4A4A55" Margin="0,0,16,0" />
+                    <TextBlock Grid.Column="1" Text="{Binding ConnectionParamsText}" Foreground="#1B5E9B"
                                Margin="0,0,16,0" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Grid.Column="1" Text="{Binding MessageText}" Foreground="#4A4A55"
+                    <TextBlock Grid.Column="2" Text="{Binding MessageText}" Foreground="#4A4A55"
                                TextTrimming="CharacterEllipsis" />
                 </Grid>
             </Grid>
         </Border>
 
-        <!-- 左侧导航 -->
+        <!-- 左侧导航：活动会话页面 + 全局页面 -->
         <Border DockPanel.Dock="Left" Width="150" Background="#F7F7F9" BorderBrush="#D6D6DC" BorderThickness="0,0,1,0">
             <ListBox ItemsSource="{Binding NavItems}" SelectedItem="{Binding SelectedNav}" BorderThickness="0"
                      Background="Transparent" Padding="6">
@@ -117,7 +120,16 @@
             </ListBox>
         </Border>
 
-        <!-- 主工作区 -->
-        <ContentControl Content="{Binding CurrentPage}" Margin="0" />
+        <!-- 主工作区；当活动会话被拆分出去时给出提示（避免误以为页面消失） -->
+        <Grid>
+            <ContentControl Content="{Binding CurrentPage}" Margin="0" />
+            <Border Background="#F7F7F9" Opacity="0.95"
+                    Visibility="{Binding ActiveWorkspace.IsDetached, Converter={StaticResource BoolToVisibility}}">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock Text="该会话已拆分到独立窗口" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                    <TextBlock Text="可点击上方“移回主窗口”让它回到这里。" Margin="0,8,0,0" HorizontalAlignment="Center" />
+                </StackPanel>
+            </Border>
+        </Grid>
     </DockPanel>
 </Window>

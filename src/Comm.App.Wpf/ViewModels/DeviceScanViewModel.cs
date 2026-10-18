@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.Windows.Data;
@@ -35,17 +35,19 @@ public partial class BaudCandidateOption : ObservableObject
 /// R-17：增加“手动探测”模式（自选只读功能码、起始地址、数量）；手动模式的写功能码在服务层被拒绝。
 /// R-11（M2.5）：增加“未知波特率 / 未知校验位”两阶段参数扫描，见规划 4.2.6 与 22.3。
 /// </summary>
-public partial class DeviceScanViewModel : ObservableObject
+public partial class DeviceScanViewModel : ObservableObject, IDisposable
 {
     private const string ScanPlanKind = ScanPlanKinds.Device;
 
     private readonly AppServices _app;
+    private readonly SessionContext _session;
     private CancellationTokenSource? _cts;
     private PauseGate? _gate;
 
-    public DeviceScanViewModel(AppServices app)
+    public DeviceScanViewModel(AppServices app, SessionContext session)
     {
         _app = app;
+        _session = session;
         var scan = app.Settings.Scan;
         _startAddress = scan.ScanStartAddress;
         _endAddress = scan.ScanEndAddress;
@@ -67,7 +69,7 @@ public partial class DeviceScanViewModel : ObservableObject
         ItemsView.Filter = o => !OnlyOnline || ((DeviceScanItem)o).Status != DeviceOnlineStatus.Offline;
 
         RefreshPlans();
-        app.Sessions.CurrentChanged += (_, _) => OnPropertyChanged(nameof(ConnectionContextText));
+        _session.Changed += OnSessionChanged;
     }
 
     public ObservableCollection<DeviceScanItem> Items { get; } = new();
@@ -179,8 +181,8 @@ public partial class DeviceScanViewModel : ObservableObject
     {
         get
         {
-            var active = _app.Sessions.ActiveSettings;
-            var original = _app.Sessions.OriginalSettings;
+            var active = _session.ActiveSettings;
+            var original = _session.OriginalSettings;
             if (active is null) return "未连接";
             if (original is null || !IsParameterScan) return active.ToDisplayString();
             return $"当前 {active.BaudRate}-{active.DataBits}-{SerialSettings.ParityCode(active.Parity)}-{SerialSettings.StopBitsCode(active.StopBits)}" +
@@ -225,7 +227,7 @@ public partial class DeviceScanViewModel : ObservableObject
         }
     }
 
-    public string DefaultUnitIdHint => $"扫描完成后可把发现地址设为默认 Unit ID（当前默认 {_app.Sessions.DefaultUnitId}）。";
+    public string DefaultUnitIdHint => $"扫描完成后可把发现地址设为默认 Unit ID（当前默认 {_session.DefaultUnitId}）。";
 
     partial void OnStartAddressChanged(int value) => OnPropertyChanged(nameof(EstimatedText));
     partial void OnEndAddressChanged(int value) => OnPropertyChanged(nameof(EstimatedText));
@@ -316,7 +318,7 @@ public partial class DeviceScanViewModel : ObservableObject
             return;
         }
 
-        var service = _app.Sessions.CreateDeviceScanService();
+        var service = _session.CreateDeviceScanService();
         if (service is null)
         {
             _app.Dialogs.Warn("尚未连接", "请先在“连接中心”打开串口或连接 TCP，然后再扫描。");
@@ -377,14 +379,14 @@ public partial class DeviceScanViewModel : ObservableObject
     /// <summary>R-11：未知波特率 / 未知校验位的两阶段参数扫描。</summary>
     private async Task StartParameterScanAsync()
     {
-        if (!_app.Sessions.IsSerialConnected)
+        if (!_session.IsSerialConnected)
         {
             _app.Dialogs.Warn("需要串口连接",
                 "未知波特率/校验位扫描需要在运行中重开串口，因此必须先连接串口（TCP 会话不支持）。");
             return;
         }
 
-        if (!_app.Sessions.CanReconfigure)
+        if (!_session.CanReconfigure)
         {
             _app.Dialogs.Warn("当前会话不支持", "当前会话不支持串口参数重配，请重新打开串口后再试。");
             return;
@@ -415,11 +417,11 @@ public partial class DeviceScanViewModel : ObservableObject
 
         SaveScanDefaults(BuildOptions());
 
-        var originalText = _app.Sessions.OriginalSettings?.ToDisplayString() ?? "(未知)";
-        bool watchWasRunning = _app.WatchList.IsRunning;
+        var originalText = _session.OriginalSettings?.ToDisplayString() ?? "(未知)";
+        bool watchWasRunning = _session.WatchList.IsRunning;
         if (watchWasRunning)
         {
-            _app.WatchList.Stop("参数扫描占用串口，监视表已暂停");
+            _session.WatchList.Stop("参数扫描占用串口，监视表已暂停");
         }
 
         PrepareRun();
@@ -434,8 +436,8 @@ public partial class DeviceScanViewModel : ObservableObject
         try
         {
             var service = new ParameterScanService(
-                () => _app.Sessions.Current,
-                _app.Sessions,
+                () => _session.Current,
+                _session,
                 message => _app.Log.Info("ParameterScan", message));
 
             var result = await service
@@ -485,7 +487,7 @@ public partial class DeviceScanViewModel : ObservableObject
             FinishRun();
             if (watchWasRunning)
             {
-                _app.WatchList.Start(TimeSpan.FromMilliseconds(Math.Max(200, _app.Settings.Scan.WatchTableIntervalMs)));
+                _session.WatchList.Start(TimeSpan.FromMilliseconds(Math.Max(200, _app.Settings.Scan.WatchTableIntervalMs)));
                 _app.Notify("参数扫描结束，监视表已恢复周期刷新。");
             }
         }
@@ -608,7 +610,7 @@ public partial class DeviceScanViewModel : ObservableObject
     private void UseAsTarget()
     {
         if (SelectedItem is null) return;
-        _app.Sessions.SetDefaultUnitId(SelectedItem.Address);
+        _session.SetDefaultUnitId(SelectedItem.Address);
         _app.Update(s => s with { Tcp = s.Tcp with { UnitId = SelectedItem.Address } });
         StatusMessage = $"已将地址 {SelectedItem.Address} 设为默认 Unit ID，可在数据扫描中使用。";
         OnPropertyChanged(nameof(DefaultUnitIdHint));
@@ -626,7 +628,7 @@ public partial class DeviceScanViewModel : ObservableObject
         }
 
         bool reconnect = false;
-        if (_app.Sessions.IsSerialConnected)
+        if (_session.IsSerialConnected)
         {
             reconnect = _app.Dialogs.Confirm("应用并重连",
                 $"将把 {item.Combination.Text} 应用到连接中心，并立即重连串口。\n\n是否继续？");
@@ -644,7 +646,7 @@ public partial class DeviceScanViewModel : ObservableObject
     {
         if (SelectedItem is null) return;
 
-        _app.WatchList.Add(new RegisterPoint
+        _session.WatchList.Add(new RegisterPoint
         {
             Name = $"从站 {SelectedItem.Address}",
             UnitId = SelectedItem.Address,
@@ -655,7 +657,7 @@ public partial class DeviceScanViewModel : ObservableObject
                    (SelectedItem.Combination is null ? "）" : $"；参数 {SelectedItem.Combination.Text}）")
         });
 
-        StatusMessage = _app.WatchList.StatusMessage + "（可在“监视表”页调整地址与数据类型）";
+        StatusMessage = _session.WatchList.StatusMessage + "（可在“监视表”页调整地址与数据类型）";
     }
 
     // ---------------------------------------------------------------- 扫描方案（规划 4.12）
@@ -779,4 +781,12 @@ public partial class DeviceScanViewModel : ObservableObject
         RefreshPlans();
         StatusMessage = $"已删除方案：{name}";
     }
+
+    // ---------------------------------------------------------------- 会话事件与释放（M3b：页面属于某个会话）
+
+    private void OnSessionChanged(object? sender, EventArgs e) => OnPropertyChanged(nameof(ConnectionContextText));
+
+    /// <summary>关闭会话时由工作区调用：解除订阅。</summary>
+    public void Dispose() => _session.Changed -= OnSessionChanged;
+
 }

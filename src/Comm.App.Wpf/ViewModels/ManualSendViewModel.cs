@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using Comm.App.Wpf.Services;
 using Comm.Core;
 using Comm.Core.Codecs;
@@ -16,22 +16,20 @@ namespace Comm.App.Wpf.ViewModels;
 /// R-19：显式选择 RTU / TCP，**未连接设备也能生成与校验报文**；只有“发送”需要活动会话。
 /// 校验计算全部由编解码器完成，界面不含任何算法。
 /// </summary>
-public partial class ManualSendViewModel : ObservableObject
+public partial class ManualSendViewModel : ObservableObject, IDisposable
 {
     private readonly AppServices _app;
+    private readonly SessionContext _session;
     private CancellationTokenSource? _loopCts;
 
-    public ManualSendViewModel(AppServices app)
+    public ManualSendViewModel(AppServices app, SessionContext session)
     {
         _app = app;
+        _session = session;
         RefreshTemplates();
 
         // 寄存器定位页可以把生成的读取报文送到这里（M2 联动）
-        _app.HexRequested += (_, payload) =>
-        {
-            HexText = payload.Hex;
-            StatusMessage = payload.Message;
-        };
+        _app.HexRequested += OnHexRequested;
     }
 
     public IReadOnlyList<Option<FrameTransport>> TransportOptions { get; } = new[]
@@ -102,19 +100,19 @@ public partial class ManualSendViewModel : ObservableObject
         _ => "当前为 Modbus RTU：程序自动计算并回填 CRC-16（低字节在前）；未连接设备也可生成报文。"
     };
 
-    public string SendAvailabilityText => _app.Sessions.IsConnected
-        ? $"已连接 {_app.Sessions.Snapshot?.Endpoint}（{_app.Sessions.Current?.Codec.Name}），可直接发送。"
+    public string SendAvailabilityText => _session.IsConnected
+        ? $"已连接 {_session.Snapshot?.Endpoint}（{_session.Current?.Codec.Name}），可直接发送。"
         : "尚未连接：可以生成、校验、保存模板；发送需要先在“连接中心”建立连接。";
 
     private FrameTransport ResolveTransport() => Transport switch
     {
         FrameTransport.Rtu => FrameTransport.Rtu,
         FrameTransport.Tcp => FrameTransport.Tcp,
-        _ => _app.Sessions.Kind == ConnectionKind.Tcp ? FrameTransport.Tcp : FrameTransport.Rtu
+        _ => _session.Kind == ConnectionKind.Tcp ? FrameTransport.Tcp : FrameTransport.Rtu
     };
 
     private ManualSendService CreateService() =>
-        _app.Sessions.CreateManualSendService(ResolveTransport(), _app.Sessions.SilenceThresholdMs);
+        _session.CreateManualSendService(ResolveTransport(), _session.SilenceThresholdMs);
 
     partial void OnTransportChanged(FrameTransport value)
     {
@@ -295,7 +293,7 @@ public partial class ManualSendViewModel : ObservableObject
         if (!service.MatchesSessionProtocol)
         {
             _app.Dialogs.Warn("报文格式不匹配",
-                $"当前选择的是 {service.Codec.Name}，而活动连接是 {_app.Sessions.Current?.Codec.Name}。\n\n" +
+                $"当前选择的是 {service.Codec.Name}，而活动连接是 {_session.Current?.Codec.Name}。\n\n" +
                 "请把“报文格式”改回“跟随当前连接”，或连接到对应协议的设备。");
             return;
         }
@@ -541,4 +539,27 @@ public partial class ManualSendViewModel : ObservableObject
         HexText = hex.Trim();
         StatusMessage = "已从历史记录载入报文。注意：如为写操作，重发会再次修改设备数据。";
     }
+
+    // ---------------------------------------------------------------- 跨页面事件与释放（M3b：页面属于某个会话）
+
+    private void OnHexRequested(object? sender, HexPayload payload)
+    {
+        HexText = payload.Hex;
+        StatusMessage = payload.Message;
+    }
+
+    /// <summary>关闭会话时由工作区调用：停止循环发送并解除全局事件订阅。</summary>
+    public void Dispose()
+    {
+        _app.HexRequested -= OnHexRequested;
+        try
+        {
+            _loopCts?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 已经释放
+        }
+    }
+
 }

@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using Comm.App.Wpf.Services;
 using System.IO;
 using Comm.Diagnostics;
@@ -18,6 +18,7 @@ public partial class SettingsViewModel : ObservableObject
         _app = app;
         LoadFromSettings();
         RefreshStoredItems();
+        RefreshWindowLayouts();
     }
 
     /// <summary>已保存的扫描方案 / 报文模板 / 设备目标（M2-3 持久化的可见入口）。</summary>
@@ -66,6 +67,23 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>X-8：环境自检报告（运行“环境检查”后填充）。</summary>
     [ObservableProperty] private string _environmentReportText = string.Empty;
 
+    // ---- 会话与工作区（M3b：规划 4.12 工作区/项目文件、21.2 多会话）
+    [ObservableProperty] private int _maxSessions = 8;
+    [ObservableProperty] private bool _reopenLastWorkspace;
+    [ObservableProperty] private string _workspaceNameText = "现场工作区";
+    [ObservableProperty] private string _workspacePathText = string.Empty;
+    [ObservableProperty] private string _workspaceStatusText = "尚未载入工作区文件。";
+    [ObservableProperty] private string _workspaceSummaryText = string.Empty;
+    [ObservableProperty] private bool _hasLoadedWorkspace;
+
+    /// <summary>工作区文件校验发现的问题（提示用，不阻止保存）。</summary>
+    public ObservableCollection<string> WorkspaceIssues { get; } = new();
+
+    /// <summary>已保存的会话窗口布局（拆分窗口的位置/尺寸，规划 21.2.2 第 5 点）。</summary>
+    public ObservableCollection<string> WindowLayouts { get; } = new();
+
+    private WorkspaceFile? _loadedWorkspace;
+
     private void LoadFromSettings()
     {
         var log = _app.Settings.Log;
@@ -80,6 +98,9 @@ public partial class SettingsViewModel : ObservableObject
         DirectoryOverride = log.Directory ?? string.Empty;
         MonitorUiCapacity = _app.Settings.Monitor.UiCapacity;
         ColorizeDirections = _app.Settings.Monitor.ColorizeDirections;
+        MaxSessions = _app.Settings.Sessions.MaxSessions;
+        ReopenLastWorkspace = _app.Settings.Sessions.ReopenLastWorkspace;
+        WorkspacePathText = _app.Settings.Sessions.LastWorkspaceFile ?? string.Empty;
         WatchTableIntervalMs = _app.Settings.Scan.WatchTableIntervalMs;
 
         LogDirectoryText = _app.Log.Directory + (string.IsNullOrEmpty(_app.Log.DirectoryWarning) ? string.Empty : $"（{_app.Log.DirectoryWarning}）");
@@ -262,6 +283,11 @@ public partial class SettingsViewModel : ObservableObject
         var error = _app.SaveSettings(_app.Settings with
         {
             Log = options,
+            Sessions = _app.Settings.Sessions with
+            {
+                MaxSessions = Math.Clamp(MaxSessions, 1, 32),
+                ReopenLastWorkspace = ReopenLastWorkspace
+            },
             Monitor = _app.Settings.Monitor with
             {
                 UiCapacity = Math.Max(1000, MonitorUiCapacity),
@@ -440,5 +466,164 @@ public partial class SettingsViewModel : ObservableObject
         var error = _app.RemoveTarget(SelectedTarget.Id);
         RefreshStoredItems();
         Message = string.IsNullOrEmpty(error) ? $"已删除设备目标：{name}" : error;
+    }
+
+    // ---------------------------------------------------------------- 会话与工作区（M3b，规划 4.12 / 21.2）
+
+    /// <summary>把当前设置保存为工作区/项目文件：方案、模板、设备目标、网卡方案、串口与 TCP 模板。</summary>
+    [RelayCommand]
+    private void SaveWorkspace()
+    {
+        var name = string.IsNullOrWhiteSpace(WorkspaceNameText) ? WorkspaceDefaults.DefaultName : WorkspaceNameText.Trim();
+        var defaultName = System.IO.Path.GetFileName(
+            string.IsNullOrWhiteSpace(WorkspacePathText) ? WorkspaceStore.DefaultPath(_app.DataDirectory, name) : WorkspacePathText);
+
+        var path = _app.Dialogs.SaveFile("保存工作区/项目文件", "工作区文件 (*.ctws)|*.ctws", defaultName);
+        if (string.IsNullOrEmpty(path)) return;
+
+        var store = new WorkspaceStore(path);
+        var file = WorkspaceStore.FromSettings(name, _app.Settings, $"由 {AppInfo.Summary()} 保存", AppInfo.Version);
+        RefreshWorkspaceIssues(file);
+
+        var error = store.Save(file);
+        if (!string.IsNullOrEmpty(error))
+        {
+            _app.Dialogs.Error("保存工作区失败", error);
+            return;
+        }
+
+        _loadedWorkspace = file;
+        HasLoadedWorkspace = true;
+        WorkspacePathText = store.Path;
+        WorkspaceSummaryText = file.SummaryText;
+        WorkspaceStatusText = $"已保存工作区：{store.Path}";
+        _app.Update(s => s with { Sessions = s.Sessions with { LastWorkspaceFile = store.Path } });
+        _app.Log.Info("Workspace", $"已保存工作区文件：{store.Path}（{file.SummaryText}）");
+        Message = WorkspaceStatusText;
+    }
+
+    /// <summary>打开工作区文件并预览（不立即应用）。</summary>
+    [RelayCommand]
+    private void OpenWorkspace()
+    {
+        var path = _app.Dialogs.OpenFile("打开工作区/项目文件", "工作区文件 (*.ctws)|*.ctws|所有文件 (*.*)|*.*");
+        if (string.IsNullOrEmpty(path)) return;
+
+        var store = new WorkspaceStore(path);
+        var result = store.Load(out var warning);
+        if (!result.IsSuccess)
+        {
+            _app.Dialogs.Error("打开工作区失败", result.Error!.ToUserText());
+            return;
+        }
+
+        _loadedWorkspace = result.Value!;
+        HasLoadedWorkspace = true;
+        WorkspacePathText = store.Path;
+        WorkspaceNameText = _loadedWorkspace.Name;
+        WorkspaceSummaryText = _loadedWorkspace.SummaryText;
+        RefreshWorkspaceIssues(_loadedWorkspace);
+
+        var issues = WorkspaceIssues.Count;
+        WorkspaceStatusText = $"已载入工作区：{store.Path}" +
+                              (issues == 0 ? string.Empty : $"（有 {issues} 个提示）") +
+                              (store.LastLoadWasReadOnly ? "（只读：文件版本高于当前程序，不会被覆盖）" : string.Empty);
+
+        if (!string.IsNullOrEmpty(warning)) _app.Dialogs.Warn("工作区文件提示", warning);
+        _app.Update(s => s with { Sessions = s.Sessions with { LastWorkspaceFile = store.Path } });
+        _app.Log.Info("Workspace", $"已载入工作区文件：{store.Path}（{_loadedWorkspace.SummaryText}）");
+        Message = WorkspaceStatusText;
+    }
+
+    /// <summary>用工作区内容替换当前配置集合。</summary>
+    [RelayCommand]
+    private void ApplyWorkspaceReplace() => ApplyWorkspace(WorkspaceMergeMode.Replace);
+
+    /// <summary>把工作区内容合并进当前配置（同 Id 以工作区为准，其余保留）。</summary>
+    [RelayCommand]
+    private void ApplyWorkspaceMerge() => ApplyWorkspace(WorkspaceMergeMode.Merge);
+
+    private void ApplyWorkspace(WorkspaceMergeMode mode)
+    {
+        if (_loadedWorkspace is null)
+        {
+            _app.Dialogs.Warn("尚未载入工作区", "请先用“打开工作区文件”载入一个 .ctws 文件。");
+            return;
+        }
+
+        var modeText = mode == WorkspaceMergeMode.Replace ? "替换当前配置集合" : "合并到当前配置（同 Id 以工作区为准）";
+        var confirmText = "将把工作区「" + _loadedWorkspace.Name + "」应用到本机设置。\n\n" +
+                          "内容：" + _loadedWorkspace.SummaryText + "\n" +
+                          "方式：" + modeText + "\n\n" +
+                          "日志、监视、扫描默认值等运行期设置不会被改动。确认应用吗？";
+
+        if (!_app.Dialogs.Confirm("应用工作区", confirmText)) return;
+
+        var updated = WorkspaceStore.ApplyTo(_loadedWorkspace, _app.Settings, mode);
+        var error = _app.SaveSettings(updated);
+        if (!string.IsNullOrEmpty(error))
+        {
+            _app.Dialogs.Error("应用工作区失败", error);
+            return;
+        }
+
+        RefreshStoredItems();
+        LoadFromSettings();
+        RefreshWindowLayouts();
+
+        var points = _loadedWorkspace.Contents.WatchPoints.Count;
+        WorkspaceStatusText = $"已应用工作区「{_loadedWorkspace.Name}」（{modeText}）" +
+                              (points > 0 ? $"；工作区内含 {points} 个监视点位（监视表为会话作用域，请在监视表页添加）。" : string.Empty);
+        _app.Log.Info("Workspace", WorkspaceStatusText);
+        Message = WorkspaceStatusText;
+    }
+
+    [RelayCommand]
+    private void RefreshWorkspaceIssues()
+    {
+        if (_loadedWorkspace is null)
+        {
+            WorkspaceIssues.Clear();
+            Message = "尚未载入工作区文件。";
+            return;
+        }
+
+        RefreshWorkspaceIssues(_loadedWorkspace);
+        Message = WorkspaceIssues.Count == 0 ? "工作区内容校验通过。" : $"工作区内容有 {WorkspaceIssues.Count} 个提示。";
+    }
+
+    private void RefreshWorkspaceIssues(WorkspaceFile file)
+    {
+        WorkspaceIssues.Clear();
+        foreach (var issue in WorkspaceValidator.Validate(file)) WorkspaceIssues.Add(issue);
+    }
+
+    /// <summary>清除所有会话窗口布局（显示器变更、布局异常时的恢复手段）。</summary>
+    [RelayCommand]
+    private void ClearWindowLayouts()
+    {
+        var count = _app.Settings.Sessions.WindowLayouts.Count;
+        if (count == 0)
+        {
+            Message = "当前没有保存的会话窗口布局。";
+            return;
+        }
+
+        if (!_app.Dialogs.Confirm("清除窗口布局", $"将删除 {count} 条会话窗口布局记录（下次拆分窗口回到默认位置）。确认继续？")) return;
+
+        _app.Update(s => s with { Sessions = s.Sessions with { WindowLayouts = Array.Empty<SessionWindowLayout>() } });
+        RefreshWindowLayouts();
+        Message = $"已清除 {count} 条会话窗口布局。";
+    }
+
+    private void RefreshWindowLayouts()
+    {
+        WindowLayouts.Clear();
+        foreach (var layout in _app.Settings.Sessions.WindowLayouts)
+        {
+            WindowLayouts.Add($"会话 {layout.SessionId}：{layout.Width:F0}×{layout.Height:F0} @ ({layout.Left:F0},{layout.Top:F0})" +
+                              (layout.Maximized ? " 最大化" : string.Empty) +
+                              (string.IsNullOrWhiteSpace(layout.MonitorDeviceName) ? string.Empty : $" · {layout.MonitorDeviceName}"));
+        }
     }
 }

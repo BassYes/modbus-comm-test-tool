@@ -3,31 +3,44 @@ using Comm.Core.Tasks;
 using Comm.Diagnostics;
 using Comm.Protocols.Modbus;
 using Comm.Scanning;
+using Comm.Session;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Comm.App.Wpf.Services;
 
 /// <summary>
+/// 会话作用域的最小访问面（M3b）：监视表等"属于某个会话"的服务通过它与会话交互，
+/// 而不直接依赖应用级会话注册表。会话注册表与会话上下文都可以提供它。
+/// </summary>
+public interface ISessionHandle
+{
+    string SessionId { get; }
+    ModbusSession? Current { get; }
+    WatchTableService? CreateWatchTableService();
+    event EventHandler? Changed;
+}
+
+/// <summary>
 /// 监视表（M2-4，规划 4.3.5、4.4.5）。
-/// 作为应用级单例：数据扫描结果、寄存器定位候选、手工添加的点位都能“加入监视表”，
+/// M3b 起为**会话作用域**：每个会话有自己的点位与采样记录，互不串扰（规划 21.2.2 第 3 点）。
 /// 周期刷新使用 <see cref="RequestPriority.Periodic"/>，因此可以与扫描任务并存（规划 13.3）。
 /// </summary>
 public sealed partial class WatchListService : ObservableObject
 {
-    private readonly SessionManager _sessions;
+    private readonly ISessionHandle _sessions;
     private readonly LogGate _log;
     private readonly Dictionary<string, WatchPointSample> _latest = new();
     private CancellationTokenSource? _cts;
     private PauseGate? _gate;
     private Task? _loop;
 
-    public WatchListService(SessionManager sessions, LogGate log)
+    public WatchListService(ISessionHandle sessions, LogGate log)
     {
         _sessions = sessions;
         _log = log;
-        _sessions.CurrentChanged += (_, _) =>
+        _sessions.Changed += (_, _) =>
         {
-            if (_sessions.IsConnected) return;
+            if (_sessions.Current is { IsOpen: true }) return;
             if (IsRunning) Stop("连接已断开，监视表已停止");
         };
     }

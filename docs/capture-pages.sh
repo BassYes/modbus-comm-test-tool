@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 # 依次打开各功能页并截图，用于人工核对界面（开发自检用，不参与构建）。
 #
 # 用法：
@@ -12,7 +12,7 @@
 set -e
 
 MODE="full"
-PAGES="1 2 3 4 5 6 7 8 9 10"
+PAGES="1 2 3 4 5 6 7 8 9 10 11"
 while [ $# -gt 0 ]; do
   case "$1" in
     --min) MODE="min"; shift ;;
@@ -67,7 +67,7 @@ capture() {
 }
 
 declare -A NAMES=( [1]=connection [2]=device-scan [3]=data-scan [4]=register-locator [5]=watch-table
-                   [6]=manual-send [7]=monitor [8]=network-tools [9]=lan-scan [10]=settings )
+                   [6]=manual-send [7]=monitor [8]=network-tools [9]=lan-scan [10]=extension-center [11]=settings )
 
 for page in $PAGES; do
   capture "$page" "${NAMES[$page]}"

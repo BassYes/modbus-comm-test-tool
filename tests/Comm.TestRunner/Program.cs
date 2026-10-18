@@ -1,4 +1,5 @@
-using System.Reflection;
+﻿using System.Reflection;
+using System.Runtime.Loader;
 using Xunit;
 using Xunit.Sdk;
 
@@ -15,16 +16,45 @@ public static class Program
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
 
-        var assemblies = new[]
+        var assemblies = new List<Assembly>
         {
             typeof(Comm.Protocols.Modbus.Tests.CrcTests).Assembly,
             typeof(Comm.Session.Tests.ModbusMasterTests).Assembly,
             typeof(Comm.Scanning.Tests.DataDecoderTests).Assembly,
             typeof(Comm.Network.Tests.SubnetCalculatorTests).Assembly,
-            typeof(Comm.Infrastructure.Tests.ShutdownCoordinatorTests).Assembly
+            typeof(Comm.Infrastructure.Tests.ShutdownCoordinatorTests).Assembly,
+            // M3a / M3b 新增的测试程序集（见 docs/m3-交付说明.md）
+            typeof(Comm.Platform.Windows.Tests.NetworkConfigValidatorTests).Assembly,
+            typeof(Comm.NetConfigHelper.Tests.RollbackCountdownTests).Assembly,
+            typeof(Comm.Plugins.Host.Tests.PluginHostTests).Assembly,
+            typeof(Comm.Architecture.Tests.ArchitectureTests).Assembly
         };
 
-        var filter = args.Length > 0 ? args[0] : null;
+        // 可选：把额外测试程序集加进来（供尚未登记到本运行器的测试项目自检）：
+        //    dotnet run --project tests/Comm.TestRunner -- --assembly=<测试程序集路径> [--filter=名称片段]
+        var extraAssemblies = args.Where(a => a.StartsWith("--assembly=", StringComparison.OrdinalIgnoreCase))
+            .Select(a => a["--assembly=".Length..])
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .ToArray();
+
+        foreach (var path in extraAssemblies)
+        {
+            var full = Path.GetFullPath(path);
+            if (!File.Exists(full))
+            {
+                Console.Error.WriteLine($"找不到测试程序集：{full}");
+                return 2;
+            }
+
+            RegisterProbeDirectory(Path.GetDirectoryName(full)!);
+            assemblies.Add(Assembly.LoadFrom(full));
+        }
+
+        var filter = args.FirstOrDefault(a => !a.StartsWith("--assembly=", StringComparison.OrdinalIgnoreCase));
+        if (filter is not null && filter.StartsWith("--filter=", StringComparison.OrdinalIgnoreCase))
+        {
+            filter = filter["--filter=".Length..];
+        }
 
         int passed = 0, failed = 0, skipped = 0;
         var failures = new List<string>();
@@ -87,6 +117,25 @@ public static class Program
         }
 
         return 0;
+    }
+
+    /// <summary>把外部测试程序集所在目录加入依赖探测路径（--assembly= 模式下必需）。</summary>
+    private static readonly HashSet<string> ProbedDirectories = new(StringComparer.OrdinalIgnoreCase);
+
+    private static void RegisterProbeDirectory(string directory)
+    {
+        if (!ProbedDirectories.Add(directory)) return;
+
+        AssemblyLoadContext.Default.Resolving += (_, name) =>
+        {
+            foreach (var probe in ProbedDirectories)
+            {
+                var candidate = Path.Combine(probe, name.Name + ".dll");
+                if (File.Exists(candidate)) return AssemblyLoadContext.Default.LoadFromAssemblyPath(candidate);
+            }
+
+            return null;
+        };
     }
 
     /// <summary>把 InlineData 的常量转换为形参类型（xunit 会做同样的事）。</summary>
