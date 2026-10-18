@@ -264,6 +264,9 @@ powershell -File tools/Invoke-SoakTest.ps1
 | 便携包（L3） | `artifacts/CommTestTool-0.4.1.0-win-x64.zip`（99 MB） | 解压即用；含 `便携包说明.txt` 与 `解除锁定-便携包.ps1` |
 
 两个包内均含 `helper\Comm.NetConfigHelper.exe`（提权助手）与 `plugins\` 受信目录。
+
+安装包已实测：静默安装（675 个文件、主程序与助手均 0.4.1）与静默卸载（0 残留、HKLM 卸载项已清除）均通过。
+若现场双击报「错误 5：拒绝访问」，是 `%TEMP%` 不可写导致的解包失败，排查与绕过见 [构建环境说明](docs/build-environment.md) 第 4.4 节。
 **未签名**：`.exe` 仍是 `NotSigned`，SmartScreen/UAC 会显示"未知发布者"（R-20 / Q-1 待正式证书）。
 
 `tools/installer.iss` 在本次首次真正编译时修了两处历史问题（此前一直走"无 Inno"回退，所以没暴露）：

@@ -130,6 +130,42 @@ artifacts\publish\
 
 **不要把 `bin/Debug` 直接拷到现场**：里面有 pdb 与中间文件，且经网络/U 盘搬运后容易带上 MOTW 标记而触发安全警告。
 
+### 4.4 安装包报“错误 5：拒绝访问”的排查
+
+现场双击安装包时可能弹出：
+
+> 安装程序无法创建目录"C:\Users\<用户>\AppData\Local\Temp\is-XXXXXXXX.tmp"。错误 5：拒绝访问。
+
+这是 Inno Setup 在**解包阶段**要用 `%TEMP%` 存临时文件，而该目录对当前进程不可写导致的，**不是安装包损坏**。
+排查顺序：
+
+1. 确认 `%TEMP%` 本身存在且可写：
+
+   ```powershell
+   $t = "$env:LOCALAPPDATA\Temp"; New-Item -ItemType Directory (Join-Path $t "t-$([guid]::NewGuid().ToString('N').Substring(0,6))") | Out-Null
+   ```
+
+   失败说明目录 ACL 异常（常见于用户配置被其他机器克隆、或装了沙箱/安全软件改过 ACL）。
+2. 若 ACL 异常，用**当前用户身份**修（`%TEMP%` 的 owner 有 WRITE_DAC，通常不需要提权）：
+
+   ```powershell
+   icacls "$env:LOCALAPPDATA\Temp" /grant "$env:USERNAME:(OI)(CI)F"
+   ```
+
+3. 临时绕过（不改系统）：把 `TEMP`/`TMP` 指到可写目录后再启动安装包。
+
+   ```powershell
+   $tmp = 'D:\Temp'; New-Item -ItemType Directory $tmp -Force | Out-Null
+   $env:TEMP = $tmp; $env:TMP = $tmp
+   & '.\通讯测试工具-0.4.1.0-安装包.exe'
+   ```
+
+   > 注意：必须让**安装包进程本身**继承到新的 TEMP。直接在资源管理器里双击不会继承——要么先用上面的命令在同一会话里启动，要么把 TEMP 改到「系统属性 → 环境变量 → 用户变量」后重新登录。
+
+4. 安全软件（如 Kaspersky）对**首次运行**的未签名安装包可能短暂拦截；放行后重试通常即可，长期方案是正式代码签名（R-20 / Q-1）。
+
+> 实测记录（2026-10-19）：同一安装包在同一机器上，`%TEMP%` 指向可写目录时安装成功、退出码 0、675 个文件；把 TEMP 指回默认目录后再次静默安装同样成功（退出码 0）。两次都已用 `unins000.exe /VERYSILENT` 卸载干净，无残留文件与 `HKLM` 卸载项。
+
 ## 5. 已知环境相关注意事项
 
 - 若构建时报“文件被 CommTestTool 占用”，先结束正在运行的实例（`taskkill /IM CommTestTool.exe /F`）。
