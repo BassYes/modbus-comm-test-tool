@@ -1,22 +1,22 @@
-# 通讯测试工具 安装包脚本（Inno Setup）
-#
-# 用途（规划 12.7、22.5.2 L2、M4）：
-#   提供“签名安装包”这一分发渠道。安装出来的程序文件**不带 MOTW**（"来自网络"标记），
-#   因此从网盘/微信/邮件获得安装包后，安装完成启动程序不会再出现"无法验证发布者"提示
-#   （前提：安装包与其中程序均已签名，见 R-20）。
-#
-# 约定：只从 tools\Publish-App.ps1 的产物目录（artifacts\publish）取文件，
-#       不从 bin\Debug 打包（避免中间文件与残留标记，见 docs/build-environment.md）。
-#
-# 用法（需要本机安装 Inno Setup 6，且已把 ISCC.exe 放进 PATH 或使用 -InnoCompiler 指定）：
-#   powershell -File tools\Build-Installer.ps1                 # 先用内置“无 Inno”回退打包
-#   powershell -File tools\Build-Installer.ps1 -UseInno        # 有 Inno Setup 时生成正式安装包
-#
-# 安装形态（与便携版共存，互不影响）：
-#   应用目录：{app}\  = CommTestTool.exe + 依赖 + helper\ + plugins\
-#   用户数据：%APPDATA%\通讯测试工具\            （设置、方案、网卡快照）
-#   日志：    %LOCALAPPDATA%\通讯测试工具\logs\  （程序目录不可写时自动回退到这里）
-#   这是因为安装到 Program Files 后程序目录不可写——AppPaths 已实现该回退（R-21 X-2）。
+; 通讯测试工具 安装包脚本（Inno Setup）
+;
+; 用途（规划 12.7、22.5.2 L2、M4）：
+;   提供“签名安装包”这一分发渠道。安装出来的程序文件**不带 MOTW**（"来自网络"标记），
+;   因此从网盘/微信/邮件获得安装包后，安装完成启动程序不会再出现"无法验证发布者"提示
+;   （前提：安装包与其中程序均已签名，见 R-20）。
+;
+; 约定：只从 tools\Publish-App.ps1 的产物目录（artifacts\publish）取文件，
+;       不从 bin\Debug 打包（避免中间文件与残留标记，见 docs/build-environment.md）。
+;
+; 用法（需要本机安装 Inno Setup 6，且已把 ISCC.exe 放进 PATH 或使用 -InnoCompiler 指定）：
+;   powershell -File tools\Build-Installer.ps1                 # 先用内置“无 Inno”回退打包
+;   powershell -File tools\Build-Installer.ps1 -UseInno        # 有 Inno Setup 时生成正式安装包
+;
+; 安装形态（与便携版共存，互不影响）：
+;   应用目录：{app}\  = CommTestTool.exe + 依赖 + helper\ + plugins\
+;   用户数据：%APPDATA%\通讯测试工具\            （设置、方案、网卡快照）
+;   日志：    %LOCALAPPDATA%\通讯测试工具\logs\  （程序目录不可写时自动回退到这里）
+;   这是因为安装到 Program Files 后程序目录不可写——AppPaths 已实现该回退（R-21 X-2）。
 
 #define AppName "通讯测试工具"
 #define AppExeName "CommTestTool.exe"
@@ -62,9 +62,9 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 
 [Files]
 ; 主程序与全部依赖（自包含发布，目标机无需预装 .NET）
-Source: "..\artifacts\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-; 便携包说明与解除锁定脚本对安装版无意义，不打包
-Excludes: "便携包说明.txt,解除锁定-便携包.ps1,data\*,logs\*"
+; 便携包说明与解除锁定脚本对安装版无意义，用 Excludes 排除；data/logs 是运行期产物，也不打包。
+; 注意：Excludes 必须与 Source 写在同一条目里，单独一行会被当成新的 [Files] 条目（首次编译就会报错）。
+Source: "..\artifacts\publish\*"; DestDir: "{app}"; Excludes: "便携包说明.txt,解除锁定-便携包.ps1,data\*,logs\*"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"

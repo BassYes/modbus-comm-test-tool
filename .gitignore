@@ -49,3 +49,6 @@ secrets/
 docs/stability-report.md
 artifacts/soak/
 stress-output/
+
+# 本地构建工具链（Inno Setup 便携版、临时目录，不纳入版本库）
+tools/_build/
