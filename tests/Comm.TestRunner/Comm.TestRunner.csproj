@@ -19,5 +19,6 @@
     <ProjectReference Include="..\Comm.NetConfigHelper.Tests\Comm.NetConfigHelper.Tests.csproj" />
     <ProjectReference Include="..\Comm.Plugins.Host.Tests\Comm.Plugins.Host.Tests.csproj" />
     <ProjectReference Include="..\Comm.Architecture.Tests\Comm.Architecture.Tests.csproj" />
+    <ProjectReference Include="..\Comm.Security.Tests\Comm.Security.Tests.csproj" />
   </ItemGroup>
 </Project>

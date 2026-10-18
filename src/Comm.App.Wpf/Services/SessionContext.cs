@@ -1,4 +1,4 @@
-using Comm.Capture;
+﻿using Comm.Capture;
 using Comm.Core;
 using Comm.Core.Codecs;
 using Comm.Core.Errors;
@@ -417,6 +417,46 @@ public sealed class SessionContext : IAsyncDisposable, ISerialReconfigurator, IS
         };
 
         return new ManualSendService(codec, _session);
+    }
+
+    /// <summary>
+    /// 创建 TCP Unit ID 扫描服务（R-12，规划 4.2.7）：
+    /// 并发为 1 时复用当前会话；并发 &gt; 1 时由工厂为额外 worker 建立**临时 TCP 连接**
+    /// （同一目标 IP:端口、相同超时与重试设置），扫描结束后由服务统一释放。
+    /// 非 TCP 会话返回 null。
+    /// </summary>
+    public UnitIdScanService? CreateUnitIdScanService()
+    {
+        if (_session is null || _tcpProfile is not { } profile) return null;
+
+        return new UnitIdScanService(_session, async cancellationToken =>
+        {
+            var options = new SessionOptions
+            {
+                SessionId = SessionId,
+                Name = $"{Name} · Unit ID 扫描",
+                ResponseTimeoutMs = profile.ResponseTimeoutMs,
+                RetryCount = profile.RetryCount,
+                TurnaroundDelayMs = _tcpProfile.TurnaroundDelayMsOrZero(),
+                SuppressEcho = false,
+                IsSerial = false
+            };
+
+            var channel = new TcpChannel(profile.ToTcpSettings());
+            var session = new ModbusSession(channel, new ModbusTcpCodec(), options, _frameBus);
+
+            try
+            {
+                await session.ConnectAsync(cancellationToken).ConfigureAwait(false);
+                return session;
+            }
+            catch (Exception ex)
+            {
+                _log.Warning("Session", $"Unit ID 扫描：建立并发连接失败（{profile.Host}:{profile.Port}）：{ex.Message}", SessionId);
+                await session.DisposeAsync().ConfigureAwait(false);
+                return null;
+            }
+        });
     }
 
     /// <summary>局域网扫描使用的 Modbus 识别委托：为每台主机建立一次临时 TCP 会话，只发一次只读请求。</summary>

@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Threading.Channels;
 
 namespace Comm.Diagnostics;
@@ -38,6 +38,7 @@ public sealed class RollingFileWriter : IAsyncDisposable
         get { lock (_sync) return _currentPath; }
     }
 
+    /// <summary>已成功写入文件的**日志行数**（M4 更正：原先统计的是刷新批次数）。</summary>
     public long WrittenCount => Interlocked.Read(ref _written);
     public long DroppedCount => Interlocked.Read(ref _dropped);
 
@@ -49,6 +50,7 @@ public sealed class RollingFileWriter : IAsyncDisposable
     private async Task WriteLoopAsync(CancellationToken cancellationToken)
     {
         var sb = new StringBuilder(16 * 1024);
+        int batchLines = 0;
         while (!cancellationToken.IsCancellationRequested)
         {
             try
@@ -57,11 +59,14 @@ public sealed class RollingFileWriter : IAsyncDisposable
                 while (_channel.Reader.TryRead(out var line))
                 {
                     sb.AppendLine(line);
+                    batchLines++;
                 }
 
                 if (sb.Length > 0)
                 {
-                    await FlushAsync(sb.ToString()).ConfigureAwait(false);
+                    int count = batchLines;
+                    batchLines = 0;
+                    await FlushAsync(sb.ToString(), count).ConfigureAwait(false);
                     sb.Clear();
                 }
             }
@@ -73,7 +78,7 @@ public sealed class RollingFileWriter : IAsyncDisposable
 
         try
         {
-            if (sb.Length > 0) await FlushAsync(sb.ToString()).ConfigureAwait(false);
+            if (sb.Length > 0) await FlushAsync(sb.ToString(), batchLines).ConfigureAwait(false);
             await CloseAsync().ConfigureAwait(false);
         }
         catch (Exception)
@@ -81,13 +86,13 @@ public sealed class RollingFileWriter : IAsyncDisposable
         }
     }
 
-    private async Task FlushAsync(string text)
+    private async Task FlushAsync(string text, int lineCount)
     {
         await EnsureWriterAsync().ConfigureAwait(false);
         if (_writer is null) return;
         await _writer.WriteAsync(text).ConfigureAwait(false);
         await _writer.FlushAsync().ConfigureAwait(false);
-        Interlocked.Increment(ref _written);
+        Interlocked.Add(ref _written, Math.Max(0, lineCount));
     }
 
     private Task EnsureWriterAsync()

@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using Comm.Core;
 using Comm.Core.Transport;
@@ -64,8 +64,14 @@ public sealed class LoopbackChannel : ITransportChannel
 
         if (response is { Length: > 0 })
         {
-            if (_responseDelayMs > 0)
-                await Task.Delay(_random.Next(_responseDelayMs / 2 + 1, _responseDelayMs + 1), cancellationToken).ConfigureAwait(false);
+            // 注意：Random.Next(min, max) 要求 min < max；delay = 0 时必须完全跳过延时，
+            // 否则 Next(1, 1) 会抛 ArgumentOutOfRangeException（M4 性能探针发现）。
+            if (_responseDelayMs > 1)
+            {
+                int min = _responseDelayMs / 2 + 1;
+                int delay = _random.Next(min, _responseDelayMs + 1);
+                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+            }
 
             await _rx.Writer.WriteAsync(new RxChunk
             {

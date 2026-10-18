@@ -27,7 +27,9 @@ public static class Program
             typeof(Comm.Platform.Windows.Tests.NetworkConfigValidatorTests).Assembly,
             typeof(Comm.NetConfigHelper.Tests.RollbackCountdownTests).Assembly,
             typeof(Comm.Plugins.Host.Tests.PluginHostTests).Assembly,
-            typeof(Comm.Architecture.Tests.ArchitectureTests).Assembly
+            typeof(Comm.Architecture.Tests.ArchitectureTests).Assembly,
+            // M4：安全与高风险回归（SR-1 ~ SR-7，规划 16.3.9，每次发布必跑）
+            typeof(Comm.Security.Tests.SecurityRegressionTests).Assembly
         };
 
         // 可选：把额外测试程序集加进来（供尚未登记到本运行器的测试项目自检）：

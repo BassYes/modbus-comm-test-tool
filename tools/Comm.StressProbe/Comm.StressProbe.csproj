@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>Comm.StressProbe</RootNamespace>
+    <AssemblyName>Comm.StressProbe</AssemblyName>
+    <AssemblyTitle>通讯测试工具 性能与稳定性探针</AssemblyTitle>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Comm.App.Wpf\Comm.App.Wpf.csproj" />
+  </ItemGroup>
+</Project>

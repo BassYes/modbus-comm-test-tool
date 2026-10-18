@@ -44,3 +44,8 @@ secrets/
 
 ## 界面截图（随仓库分发，如不需要可取消下面的注释）
 # docs/screenshot-*.png
+
+## 探针/长跑生成物（可随时重跑覆盖，见 docs/m4-交付说明.md）
+docs/stability-report.md
+artifacts/soak/
+stress-output/

@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using Comm.Core;
@@ -53,6 +53,7 @@ public sealed class FrameFileWriter : IAsyncDisposable
     }
 
     public bool IsRecording { get; private set; }
+    /// <summary>已成功写入文件的**报文条数**（M4：原先统计的是“刷新批次数”，与用途不符，已更正）。</summary>
     public long WrittenCount => Interlocked.Read(ref _written);
     public long DroppedCount => Interlocked.Read(ref _dropped);
 
@@ -108,6 +109,7 @@ public sealed class FrameFileWriter : IAsyncDisposable
     {
         var buffer = new StringBuilder(64 * 1024);
         var options = new JsonSerializerOptions { WriteIndented = false };
+        int batchCount = 0;
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -117,6 +119,7 @@ public sealed class FrameFileWriter : IAsyncDisposable
 
                 while (_channel.Reader.TryRead(out var record))
                 {
+                    batchCount++;
                     var json = JsonSerializer.Serialize(new
                     {
                         type = "frame",
@@ -137,7 +140,9 @@ public sealed class FrameFileWriter : IAsyncDisposable
 
                 if (buffer.Length > 0)
                 {
-                    await AppendAsync(buffer.ToString(), cancellationToken).ConfigureAwait(false);
+                    int batchRecords = batchCount;
+                    batchCount = 0;
+                    await AppendAsync(buffer.ToString(), batchRecords, cancellationToken).ConfigureAwait(false);
                     buffer.Clear();
                 }
             }
@@ -155,7 +160,7 @@ public sealed class FrameFileWriter : IAsyncDisposable
 
         try
         {
-            if (buffer.Length > 0) await AppendAsync(buffer.ToString(), CancellationToken.None).ConfigureAwait(false);
+            if (buffer.Length > 0) await AppendAsync(buffer.ToString(), batchCount, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception)
         {
@@ -163,7 +168,7 @@ public sealed class FrameFileWriter : IAsyncDisposable
         }
     }
 
-    private async Task AppendAsync(string text, CancellationToken cancellationToken)
+    private async Task AppendAsync(string text, int recordCount, CancellationToken cancellationToken)
     {
         var target = EnsureCapacity();
         if (target is null) return;
@@ -172,7 +177,7 @@ public sealed class FrameFileWriter : IAsyncDisposable
         using var stream = new FileStream(target, FileMode.Append, FileAccess.Write, FileShare.Read, 64 * 1024, true);
         await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
         await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
-        Interlocked.Increment(ref _written);
+        Interlocked.Add(ref _written, Math.Max(0, recordCount));
     }
 
     /// <summary>按体积滚动：超过上限时切换到下一个分卷文件。</summary>

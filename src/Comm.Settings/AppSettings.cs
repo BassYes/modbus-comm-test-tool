@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using Comm.Core.Transport;
 using Comm.Diagnostics;
@@ -41,12 +41,22 @@ public sealed record TcpProfile
     public int ResponseTimeoutMs { get; init; } = 1000;
     public int RetryCount { get; init; } = 1;
 
+    /// <summary>TCP 请求之间的最小间隔（毫秒）；默认 0（TCP 不需要 RTU 的轮转延迟）。</summary>
+    public int TurnaroundDelayMs { get; init; }
+
     public TcpSettings ToTcpSettings() => new()
     {
         Host = Host,
         Port = Port,
         ConnectTimeoutMs = ConnectTimeoutMs
     };
+}
+
+/// <summary>TcpProfile 的辅助扩展（保持模型不可变）。</summary>
+public static class TcpProfileExtensions
+{
+    /// <summary>把可能为负的间隔规范为 0（TCP 默认不需要轮转延迟）。</summary>
+    public static int TurnaroundDelayMsOrZero(this TcpProfile profile) => profile is null ? 0 : Math.Max(0, profile.TurnaroundDelayMs);
 }
 
 public sealed record MonitorSettings
@@ -202,6 +212,8 @@ public static class ScanPlanKinds
     public const string Data = "data";
     public const string Locate = "locate";
     public const string Lan = "lan";
+    /// <summary>TCP Unit ID 扫描方案（R-12）。</summary>
+    public const string UnitId = "unitid";
 
     public static string ToChinese(string kind) => kind switch
     {
@@ -209,6 +221,7 @@ public static class ScanPlanKinds
         Data => "数据扫描",
         Locate => "寄存器定位",
         Lan => "局域网扫描",
+        UnitId => "Unit ID 扫描",
         _ => kind
     };
 }

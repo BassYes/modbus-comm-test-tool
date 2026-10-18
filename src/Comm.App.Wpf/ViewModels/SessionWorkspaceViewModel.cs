@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Windows.Threading;
 using Comm.App.Wpf.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -23,6 +23,8 @@ public sealed partial class SessionWorkspaceViewModel : ObservableObject, IDispo
         // 每个会话一组页面实例（规划 21.2.2 第 2 点：会话页面不再全部是应用级单例）。
         Connection = new ConnectionViewModel(app, session);
         DeviceScan = new DeviceScanViewModel(app, session);
+        // R-12：TCP Unit ID 扫描（M4 新增，规划 4.2.7）
+        UnitIdScan = new UnitIdScanViewModel(app, session);
         DataScan = new DataScanViewModel(app, session);
         RegisterLocator = new RegisterLocatorViewModel(app, session);
         WatchTable = new WatchTableViewModel(app, session);
@@ -33,6 +35,7 @@ public sealed partial class SessionWorkspaceViewModel : ObservableObject, IDispo
         {
             new("连接中心", "⇄", Connection),
             new("设备扫描", "⌕", DeviceScan),
+            new("Unit ID 扫描", "⇉", UnitIdScan),
             new("数据扫描", "▤", DataScan),
             new("寄存器定位", "◎", RegisterLocator),
             new("监视表", "◉", WatchTable),
@@ -60,6 +63,9 @@ public sealed partial class SessionWorkspaceViewModel : ObservableObject, IDispo
 
     public ConnectionViewModel Connection { get; }
     public DeviceScanViewModel DeviceScan { get; }
+
+    /// <summary>TCP Unit ID 扫描（R-12）。</summary>
+    public UnitIdScanViewModel UnitIdScan { get; }
     public DataScanViewModel DataScan { get; }
     public RegisterLocatorViewModel RegisterLocator { get; }
     public WatchTableViewModel WatchTable { get; }
@@ -119,6 +125,7 @@ public sealed partial class SessionWorkspaceViewModel : ObservableObject, IDispo
 
         Connection.Dispose();
         DeviceScan.Dispose();
+        UnitIdScan.Dispose();
         DataScan.Dispose();
         RegisterLocator.Dispose();
         WatchTable.Dispose();

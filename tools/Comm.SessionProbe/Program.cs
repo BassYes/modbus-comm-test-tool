@@ -123,6 +123,50 @@ public static class Program
         var closed = sessions.CloseSession(sessionB.SessionId);
         Check("可关闭其中一个会话", closed.IsSuccess, closed.Error?.ToUserText());
         Check("关闭后会话列表同步", sessions.Sessions.Count == 1 && sessions.Sessions.All(s => s.SessionId != sessionB.SessionId));
+        // ⑧ R-12：Unit ID 扫描端到端（真实 SessionContext 接线 + 进程内网关模拟器）
+        //    放在关闭会话 2 之后执行，避免撞上 MaxSessions=2 的上限。
+        await using (var gateway = new LoopbackModbusTcpSlave(new byte[] { 3, 7, 12 }))
+        {
+            gateway.Start();
+            var unitSession = sessions.CreateSession("Unit ID 会话");
+            Check("可创建 Unit ID 扫描用的会话", unitSession.IsSuccess, unitSession.Error?.ToUserText());
+
+            var tcp = new TcpProfile
+            {
+                Host = "127.0.0.1", Port = gateway.Port, UnitId = 1,
+                ResponseTimeoutMs = 300, RetryCount = 0
+            };
+
+            var connected = await unitSession.Value!.ConnectTcpAsync(tcp);
+            Check("Unit ID 会话连上网关模拟器", connected.IsSuccess, connected.Error?.ToUserText());
+
+            var service = unitSession.Value.CreateUnitIdScanService();
+            Check("TCP 会话可创建 Unit ID 扫描服务", service is not null);
+
+            if (service is not null)
+            {
+                var items = await service.ScanAsync(new UnitIdScanOptions
+                {
+                    StartUnitId = 1,
+                    EndUnitId = 15,
+                    ResponseTimeoutMs = 300,
+                    IntervalMs = 0,
+                    TryReadDeviceIdentification = false
+                }, null, null, null, CancellationToken.None);
+
+                var online = items.Where(i => i.Status == DeviceOnlineStatus.Online).Select(i => i.UnitId).OrderBy(i => i).ToArray();
+                Check("Unit ID 扫描只发现网关后面真实存在的从站",
+                    online.SequenceEqual(new byte[] { 3, 7, 12 }),
+                    $"实际 {string.Join(",", online)}（期望 3,7,12）");
+                Check("Unit ID 扫描覆盖了全部 15 个 Unit ID", items.Count == 15, $"{items.Count} 条结果");
+                Check("Unit ID 扫描不产生写功能码",
+                    items.All(i => !Fn.IsWrite(i.ProbeFunction)),
+                    string.Join(",", items.Where(i => Fn.IsWrite(i.ProbeFunction)).Select(i => i.ProbeFunction)));
+            }
+
+            sessions.CloseSession(unitSession.Value.SessionId);
+        }
+
         var lastClose = sessions.CloseSession(sessions.Sessions[0].SessionId);
         Check("最后一个会话不允许关闭（至少保留一个）",
             !lastClose.IsSuccess && (lastClose.Error?.Message.Contains("至少", StringComparison.Ordinal) ?? false),
@@ -180,11 +224,16 @@ internal sealed class LoopbackModbusTcpSlave : IAsyncDisposable
 {
     private readonly TcpListener _listener;
     private readonly CancellationTokenSource _cts = new();
+    private readonly HashSet<byte>? _answerOnlyUnitIds;
     private Task? _loop;
 
-    public LoopbackModbusTcpSlave()
+    /// <param name="answerOnlyUnitIds">
+    /// 只在这些 Unit ID 上应答（模拟网关后只挂了几台从站）；null = 对所有 Unit ID 应答。
+    /// </param>
+    public LoopbackModbusTcpSlave(IEnumerable<byte>? answerOnlyUnitIds = null)
     {
         _listener = new TcpListener(IPAddress.Loopback, 0);
+        _answerOnlyUnitIds = answerOnlyUnitIds is null ? null : new HashSet<byte>(answerOnlyUnitIds);
     }
 
     public int Port { get; private set; }
@@ -212,11 +261,12 @@ internal sealed class LoopbackModbusTcpSlave : IAsyncDisposable
                 return;
             }
 
-            _ = Task.Run(() => ServeAsync(client, token), token);
+            var server = this;
+            _ = Task.Run(() => server.ServeAsync(client, token), token);
         }
     }
 
-    private static async Task ServeAsync(TcpClient client, CancellationToken token)
+    private async Task ServeAsync(TcpClient client, CancellationToken token)
     {
         using var _ = client;
         var stream = client.GetStream();
@@ -233,6 +283,9 @@ internal sealed class LoopbackModbusTcpSlave : IAsyncDisposable
                 ushort transactionId = (ushort)((buffer[0] << 8) | buffer[1]);
                 byte unitId = buffer[6];
                 byte function = buffer[7];
+
+                // 网关后面的“不存在的从站”不回帧 → 客户端超时（与真实现场一致）。
+                if (_answerOnlyUnitIds is not null && !_answerOnlyUnitIds.Contains(unitId)) continue;
 
                 ushort start = (ushort)((buffer[8] << 8) | buffer[9]);
                 ushort count = (ushort)((buffer[10] << 8) | buffer[11]);

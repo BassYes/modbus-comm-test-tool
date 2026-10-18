@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Threading.Channels;
 using Comm.Core;
 using Comm.Core.Codecs;
@@ -27,6 +27,13 @@ public sealed class ModbusMaster : IAsyncDisposable
         Channel.CreateUnbounded<PendingRequest>(new UnboundedChannelOptions { SingleReader = true }),
         Channel.CreateUnbounded<PendingRequest>(new UnboundedChannelOptions { SingleReader = true })
     };
+
+    /// <summary>
+    /// 队列到达信号（M4）：优先级队列本身是 Channel，但需要“三个队列里任意一个有数据”的等待语义，
+    /// 因此用信号量做唤醒。原来用 <c>Task.Delay(5)</c> 轮询，实测每次事务多等约 5~15 ms
+    /// （回环往返仅 ~64 次/s）；改为信号量后延迟取决于线程调度（微秒级）。
+    /// </summary>
+    private readonly SemaphoreSlim _queueSignal = new(0);
 
     private readonly object _sync = new();
     private CancellationTokenSource? _cts;
@@ -101,6 +108,19 @@ public sealed class ModbusMaster : IAsyncDisposable
             }
         }
 
+        // 清掉可能残留的唤醒信号，避免下一次启动时空转一圈。
+        while (_queueSignal.CurrentCount > 0)
+        {
+            try
+            {
+                _queueSignal.Wait(0);
+            }
+            catch (Exception)
+            {
+                break;
+            }
+        }
+
         try
         {
             if (_dispatchLoop is not null) await _dispatchLoop.ConfigureAwait(false);
@@ -137,6 +157,19 @@ public sealed class ModbusMaster : IAsyncDisposable
 
         await _queues[(int)request.Priority].Writer.WriteAsync(pending, cancellationToken).ConfigureAwait(false);
 
+        // 唤醒调度循环：把它从无请求的等待中叫醒（多释放一次不会造成问题，TryDequeue 会兜底）。
+        if (_queueSignal.CurrentCount == 0)
+        {
+            try
+            {
+                _queueSignal.Release();
+            }
+            catch (SemaphoreFullException)
+            {
+                // 已有待处理的唤醒信号，忽略
+            }
+        }
+
         using var registration = cancellationToken.Register(() => completion.TrySetResult(CancelledResult(request)));
         return await completion.Task.ConfigureAwait(false);
     }
@@ -164,6 +197,17 @@ public sealed class ModbusMaster : IAsyncDisposable
             return true;
         }
 
+        // 规划 13.3 / CC-6：写类请求不得出现在 P1（周期）与 P2（扫描）优先级队列，
+        // 否则监视表刷新或扫描任务可能在无人确认的情况下改动现场设备（M4 安全回归 SR-2 发现并补上）。
+        if (request.Priority != RequestPriority.Interactive)
+        {
+            var priorityText = request.Priority == RequestPriority.Periodic ? "周期刷新（P1）" : "扫描（P2）";
+            error = new ErrorInfo(ErrorCodes.ValidationScanWriteBlocked, ErrorCategory.Validation, Severity.Error,
+                $"拒绝在{priorityText}优先级队列中发送写请求（功能码 0x{request.Pdu.Function:X2}）",
+                Hint: "写操作只允许交互式（P0）请求，且必须由用户确认；扫描与周期任务不得产生写操作");
+            return true;
+        }
+
         return false;
     }
 
@@ -177,8 +221,12 @@ public sealed class ModbusMaster : IAsyncDisposable
         {
             if (!TryDequeue(out var pending))
             {
-                await Task.Delay(5, cancellationToken).ConfigureAwait(false);
-                continue;
+                // 等“有新请求”的信号；100 ms 兜底超时只为防御信号丢失，正常路径不会被触发。
+                await _queueSignal.WaitAsync(100, cancellationToken).ConfigureAwait(false);
+                if (!TryDequeue(out pending))
+                {
+                    continue;
+                }
             }
 
             ExchangeResult result;

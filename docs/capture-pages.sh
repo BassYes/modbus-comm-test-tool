@@ -2,7 +2,7 @@
 # 依次打开各功能页并截图，用于人工核对界面（开发自检用，不参与构建）。
 #
 # 用法：
-#   bash docs/capture-pages.sh                 # 默认：最大化逐页截图（现有交付截图）
+#   bash docs/capture-pages.sh                 # 默认：最大化逐页截图（12 个功能页：1-8 会话页，9-12 全局页）
 #   bash docs/capture-pages.sh --min           # 900×480 最小窗口逐页截图（B-01 验收）
 #   bash docs/capture-pages.sh --pages 2,8     # 只截指定页
 #
@@ -12,7 +12,7 @@
 set -e
 
 MODE="full"
-PAGES="1 2 3 4 5 6 7 8 9 10 11"
+PAGES="1 2 3 4 5 6 7 8 9 10 11 12"
 while [ $# -gt 0 ]; do
   case "$1" in
     --min) MODE="min"; shift ;;
@@ -66,8 +66,9 @@ capture() {
   echo "captured $name$SUFFIX"
 }
 
-declare -A NAMES=( [1]=connection [2]=device-scan [3]=data-scan [4]=register-locator [5]=watch-table
-                   [6]=manual-send [7]=monitor [8]=network-tools [9]=lan-scan [10]=extension-center [11]=settings )
+declare -A NAMES=(
+  [1]=connection [2]=device-scan [3]=unit-id-scan [4]=data-scan [5]=register-locator [6]=watch-table
+  [7]=manual-send [8]=monitor [9]=network-tools [10]=lan-scan [11]=extension-center [12]=settings )
 
 for page in $PAGES; do
   capture "$page" "${NAMES[$page]}"

@@ -20,6 +20,9 @@
             <DataTemplate DataType="{x:Type vm:DeviceScanViewModel}">
                 <views:DeviceScanView />
             </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:UnitIdScanViewModel}">
+                <views:UnitIdScanView />
+            </DataTemplate>
             <DataTemplate DataType="{x:Type vm:DataScanViewModel}">
                 <views:DataScanView />
             </DataTemplate>

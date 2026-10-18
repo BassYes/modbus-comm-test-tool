@@ -1,10 +1,14 @@
-﻿# 通讯测试工具 v0.3.0（Modbus RTU / Modbus TCP 现场调试）
+﻿# 通讯测试工具 v0.4.0（Modbus RTU / Modbus TCP 现场调试）
 
-按《通讯测试工具-产品与功能规划》实施的可运行版本：**M1 通信核心 + M2 定位与发现 + M2.5 稳定化与可分发基线 + M3 网络配置与扩展**。
+按《通讯测试工具-产品与功能规划》实施的可运行版本：**M1 通信核心 + M2 定位与发现 + M2.5 稳定化与可分发基线 + M3 网络配置与扩展 + M4 加固与发布**。
 
-界面截图见 `docs/screenshot-*.png`（截图为 10 页时的版本，当前为 **11 个功能页**，另有 `-min900x480` 最小窗口版本）。
+界面截图见 `docs/screenshot-*.png`（截图为 10 页时的版本，当前为 **12 个功能页**，另有 `-min900x480` 最小窗口版本）。
+**现场使用请先看 [用户手册](docs/用户手册.md)**。
+
 里程碑说明：M1 交接与反馈修复见 [`m1-handoff.md`](m1-handoff.md)；M2 见 [`docs/m2-交付说明.md`](docs/m2-交付说明.md)；
-M2.5 见 [`docs/m2.5-交付说明.md`](docs/m2.5-交付说明.md)；**M3（当前版本）见 [`docs/m3-交付说明.md`](docs/m3-交付说明.md)**；
+M2.5 见 [`docs/m2.5-交付说明.md`](docs/m2.5-交付说明.md)；M3 见 [`docs/m3-交付说明.md`](docs/m3-交付说明.md)；
+**M4（当前版本）见 [`docs/m4-交付说明.md`](docs/m4-交付说明.md)**；
+v1.0 验收状态见 [`docs/v1.0-验收清单.md`](docs/v1.0-验收清单.md)，安全回归见 [`docs/security-regression.md`](docs/security-regression.md)；
 硬件回归见 [`docs/hardware-compatibility-matrix-v1.md`](docs/hardware-compatibility-matrix-v1.md)；
 签名与安全警告见 [`docs/code-signing-plan.md`](docs/code-signing-plan.md) 与 [`docs/security-warning-matrix.md`](docs/security-warning-matrix.md)。
 
@@ -27,7 +31,7 @@ M2.5 见 [`docs/m2.5-交付说明.md`](docs/m2.5-交付说明.md)；**M3（当�
 | — | 扫描方案 / 报文模板 / 设备目标持久化 | **新增**：设置文件 schemaVersion 升到 **2**，v1 自动迁移且不丢原字段；方案只存“选项快照”（向前兼容）；写模板带风险标签，重发需再次确认 |
 | R-11 | **设备扫描：未知波特率 / 未知校验位** | **M2.5 完成**：设备扫描页新增“串口参数”区（使用连接中心 / 指定 / **未知**）；两阶段扫描（阶段 A 少量地址定位参数 → 阶段 B 扫完整地址段 + 3/3 确认）；结果表新增波特率/校验/停止位与“推荐”；一键“应用到连接中心”；四种终态都恢复原参数；静默阈值与响应超时随波特率变化 |
 | R-07 / R-13 | 网卡配置 / 辅助 IP | **M3a 完成**：网络工具页可配置本机网卡静态 IPv4 / 掩码 / 网关 / DNS、切换 DHCP、叠加与移除辅助 IP；写操作全部交给提权助手 `Comm.NetConfigHelper.exe`（UAC 按需拉起、固定命令白名单）；应用前自动保存快照、回读校验、失败自动回滚、可一键恢复；可选安全恢复倒计时（默认关，勾选后默认 60 s，由助手持有） |
-| R-12 | TCP Unit ID 扫描 | M4 |
+| R-12 | TCP Unit ID 扫描 | **M4 完成**：Modbus TCP 网关（后挂 RS-485）逐个 Unit ID 找在线从站；探测规则与串口设备扫描完全一致（自动模板 / 手动只读模板 / 异常响应判在线），**默认串行**、并发度 1~8 需二次确认，每个 Unit ID 恰好探一次；支持暂停/停止、CSV 导出、设为默认 Unit ID、保存为设备目标、扫描方案 |
 | R-16 | 多会话与可拆分窗口 | **M3b 完成（第一阶段）**：会话注册表（上限默认 8，至少保留 1 个）、每会话独立的连接/统计/监视/监视表、串口按 `COMx` 全局独占、会话标签栏与“拆分到新窗口 / 移回主窗口”、窗口位置按会话持久化；跨窗口拖拽停靠留 v1.x |
 | R-20 | 消除“无法验证发布者”警告 | **M2.5**：签名流水线可运行（测试证书联调）、便携包附解除锁定脚本、证书采购清单与验证矩阵已交付；正式证书待定案（Q-1） |
 | R-21 | 适配其他电脑 | **M2.5**：默认 Release 自包含发布、数据目录回退、DPI/执行级别 manifest、应用图标与版本资源、最小窗口 900×480、导出用 `InvariantCulture`、串口与网卡兼容提示、环境自检、版本号单一来源 |
@@ -35,6 +39,9 @@ M2.5 见 [`docs/m2.5-交付说明.md`](docs/m2.5-交付说明.md)；**M3（当�
 另外实现的能力：会话统计（TX/RX/超时/校验错误/异常响应/未匹配/回显/拒绝）、任务进度与暂停/停止、结果导出 CSV（设备 / 数据 / 定位 / 监视表 / 局域网）、崩溃报告与诊断包、`--page=N` 直接打开指定功能页（1–11）、设置页“环境自检”（系统/DPI/串口驱动/网卡/签名与 MOTW，仅本机生成不上传）。
 
 **M3b 另交付**：工作区/项目文件（`.ctws`，含方案/模板/设备目标/网卡方案，支持替换与合并导入、损坏备份、高版本只读）、架构测试（依赖方向白名单与 WPF 隔离等 15 项断言）、多会话验收探针 `tools/Comm.SessionProbe`（23 项，进程内 TCP 模拟器）。
+
+**M4 另交付**：性能与稳定性探针 `tools/Comm.StressProbe`（1000 帧/s、20 万条显示缓冲、过滤首屏、成帧吞吐、落盘完整性，退出码即门禁）、长跑脚本 `tools/Invoke-SoakTest.ps1`（默认 24 h / `-Quick` 5 分钟）、
+安全回归 `tests/Comm.Security.Tests`（SR-1~SR-7 共 22 用例）、安装包脚本 `tools/Build-Installer.ps1` + `tools/installer.iss`、[用户手册](docs/用户手册.md)、[v1.0 验收清单](docs/v1.0-验收清单.md)、[安全回归清单](docs/security-regression.md)。
 
 
 ## 2. 工程结构
@@ -61,6 +68,10 @@ M2.5 见 [`docs/m2.5-交付说明.md`](docs/m2.5-交付说明.md)；**M3（当�
   tools/
     Comm.HilProbe/             真实硬件回归探针（只读：回显/拆帧/字节间隔/静默阈值）
     Comm.SessionProbe/         多会话验收探针（R-16：两会话并行、串口独占、会话上限）
+    Comm.StressProbe/          性能与稳定性探针（1000 帧/s、20 万条缓冲、过滤首屏、成帧吞吐、落盘完整性）
+    installer.iss              Inno Setup 安装包脚本（安装版：文件不带“来自网络”标记）
+    Build-Installer.ps1        构建安装包（有 Inno 用正式安装包，无则回退便携安装包 zip）
+    Invoke-SoakTest.ps1        稳定性长跑（默认 24 h，-Quick 5 分钟），生成 docs/stability-report.md
     Publish-App.ps1            Release 自包含发布 + 可选签名 + 便携包打包
     Sign-App.ps1               代码签名（SHA-256 + RFC3161 时间戳）
     New-DevCodeSigningCert.ps1 开发自签名证书（联调用）
@@ -130,19 +141,31 @@ $DOTNET run --project tests/Comm.TestRunner        # 本地运行器，输出通
 $DOTNET test CommTestTool.sln                       # 标准 VSTest 方式（在装有 VS/正常桌面环境时使用）
 ```
 
-当前 **403 个用例全部通过**（协议 50、会话 12、扫描与解码 87、网络 45、基础设施 32、网卡配置与提权助手 77、
-插件宿主 40、工作区文件 18、架构 15、其它 27），连续多次运行结果稳定。
+当前 **442 个用例全部通过**（协议 50、会话 12、扫描与解码 106、网络 45、基础设施 32、网卡配置与提权助手 77、
+插件宿主 40、工作区文件 18、架构 15、安全回归 22、其它 25），连续多次运行结果稳定。
 M2.5 新增 30 个用例集中在 R-11（组合生成与排序、停止位策略、耗时估计与超时确认、阶段 A/B 流转、
 参数感知设备定位、多组合命中与推荐、3/3 确认与“疑似”、取消/异常/超时后恢复原参数、只读与不广播、
 静默阈值与响应超时随波特率变化、方案往返与旧方案默认值、结果列展示）。
 M3 新增 195 个用例，重点覆盖：网卡配置校验与快照/回滚/确认、提权助手命令白名单与倒计时（含“不执行任意命令”）、
 插件清单校验与版本范围、独立 ALC 的类型标识、注册异常/超时/连续失败自动禁用、工作区往返与合并语义、
 依赖方向白名单与 WPF 隔离。
+M4 新增 39 个用例：R-12 Unit ID 扫描（19）与安全回归 SR-1~SR-7（22，含静态源码扫描“无外联上传 API”）。
 
 多会话（R-16）另有一份可执行验收探针：
 
 ```bash
 $DOTNET run --project tools/Comm.SessionProbe      # 23 项：两会话并行、统计与监视不串会话、串口独占、会话上限
+```
+
+性能与稳定性（M4）：
+
+```bash
+# 性能探针：60 s @1000 帧/s + 20 万条显示缓冲，退出码 0 = 全部阈值通过
+$DOTNET run --project tools/Comm.StressProbe -- --seconds 60 --frames 200000 --report docs/stability-probe-report.md
+
+# 稳定性长跑：-Quick 为 5 分钟冒烟；不带参数为 24 h
+powershell -File tools/Invoke-SoakTest.ps1 -Quick
+powershell -File tools/Invoke-SoakTest.ps1
 ```
 
 > 说明：本机环境下 VSTest 的 `testhost` 会被拒绝访问父进程句柄（`Win32Exception (5)`），因此额外提供了 `Comm.TestRunner`：它用反射直接执行同一批 xunit 用例，不依赖 VSTest，便于受限环境下自检。用例本身是标准 xunit，正常环境可直接 `dotnet test`。
@@ -187,6 +210,10 @@ $DOTNET run --project tools/Comm.SessionProbe      # 23 项：两会话并行、
 - 可执行文件名是 `CommTestTool.exe`（中文程序名在部分构建/签名工具链上易出问题），界面标题为“通讯测试工具”。
 - **真实网卡写入未在本机实测**：UAC 提权、回读校验、失败回滚、倒计时到期自动恢复需要隔离虚拟机（不能拿开发机网卡试），
   操作步骤见 [`docs/m3-交付说明.md`](docs/m3-交付说明.md) 第 6 节。
+- **24 h 稳定性与 1000 帧/s 下的界面可操作性**：软件侧已用探针验证（落盘 0 丢失、过滤首屏 ~2 ms、20 万条内存 ~148 MB），
+  界面交互与真实硬件长跑仍需目标机实测，见 [`docs/m4-交付说明.md`](docs/m4-交付说明.md) 第 6 节。
+- **安装包需 Inno Setup**：本机未安装，`tools\Build-Installer.ps1` 会回退生成“便携安装包 zip”；
+  正式安装包与干净机安装验收待执行。
 - **拆分窗口的真实交互未自动验证**：多显示器、125%/150%/200% DPI、重启后位置恢复需要人工执行，步骤同上。
 - **插件宿主的安全边界**：`AssemblyLoadContext` **不是安全沙箱**，只加载 `plugins\` 下的受信插件；第三方插件仍可能执行任意代码。
 - R-16 第二阶段（跨窗口拖拽停靠）按规划留在 v1.x；本阶段只做明确的“拆分到新窗口 / 移回主窗口”。
