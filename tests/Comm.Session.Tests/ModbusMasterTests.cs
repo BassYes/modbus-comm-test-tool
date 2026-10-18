@@ -272,4 +272,125 @@ public class ModbusMasterTests
 
         await session.DisposeAsync();
     }
+
+    // -----------------------------------------------------------------------------------------
+    // 审计 F-01 回归：写门禁必须按"最终发送字节"判定，不能只看声明字段
+    // -----------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task RawAdu_declaring_read_but_carrying_write_is_rejected_without_tx()
+    {
+        var (session, slave, observer) = CreateRtu();
+        await session.ConnectAsync();
+
+        var codec = new ModbusRtuCodec();
+        var declaredRead = ModbusRequests.Read(DataArea.HoldingRegisters, 0, 1);
+        var writeFrame = codec.BuildAdu(ModbusRequests.WriteSingleRegister(5, 0x1234).ToBytes(), 1);
+
+        // 声明"读"，原始帧里却是"写 0x1234"，且没有任何写确认
+        var result = await session.ExecuteAsync(new ModbusRequest(1, declaredRead, RawAdu: writeFrame));
+
+        Assert.Equal(ExchangeStatus.Rejected, result.Status);
+        Assert.Equal(Comm.Core.Errors.ErrorCodes.ValidationRawAduMismatch, result.Error!.Code);
+        Assert.Equal(0, session.Statistics.TxCount);                          // 一个字节都没发
+        Assert.DoesNotContain(observer.Records, r => r.Direction == FrameDirection.Tx);
+        Assert.Empty(slave.ReceivedRequests);
+        Assert.False(slave.HoldingRegisters.ContainsKey(5));                   // 设备数据没被改
+
+        await session.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task RawAdu_with_broadcast_bytes_under_normal_address_is_rejected()
+    {
+        var (session, slave, _) = CreateRtu();
+        await session.ConnectAsync();
+
+        var codec = new ModbusRtuCodec();
+        var declared = ModbusRequests.Read(DataArea.HoldingRegisters, 0, 1);
+        // 声明地址 1（普通地址），原始帧却是地址 0 的广播写
+        var broadcastWrite = codec.BuildAdu(ModbusRequests.WriteSingleRegister(5, 0x2222).ToBytes(), 0);
+
+        var result = await session.ExecuteAsync(new ModbusRequest(1, declared, RawAdu: broadcastWrite));
+
+        Assert.Equal(ExchangeStatus.Rejected, result.Status);
+        Assert.Equal(Comm.Core.Errors.ErrorCodes.ValidationRawAduMismatch, result.Error!.Code);
+        Assert.Equal(0, session.Statistics.TxCount);
+        Assert.Empty(slave.ReceivedRequests);
+
+        await session.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task RawAdu_write_frame_in_scan_priority_is_rejected_even_if_confirmed()
+    {
+        var (session, slave, observer) = CreateRtu();
+        await session.ConnectAsync();
+
+        var codec = new ModbusRtuCodec();
+        var declaredRead = ModbusRequests.Read(DataArea.HoldingRegisters, 0, 1);
+        var writeFrame = codec.BuildAdu(ModbusRequests.WriteSingleRegister(5, 0x3333).ToBytes(), 1);
+
+        // 扫描优先级 + 已确认 + 原始帧是写：三种绕过条件叠加也必须被挡
+        var result = await session.ExecuteAsync(new ModbusRequest(1, declaredRead, RequestPriority.Scan,
+            Confirmed: true, BroadcastConfirmed: true, RawAdu: writeFrame));
+
+        Assert.Equal(ExchangeStatus.Rejected, result.Status);
+        Assert.Equal(0, session.Statistics.TxCount);
+        Assert.DoesNotContain(observer.Records, r => r.Direction == FrameDirection.Tx);
+        Assert.Empty(slave.ReceivedRequests);
+
+        await session.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task RawAdu_mismatch_is_rejected_on_tcp_too()
+    {
+        var slave = new ModbusSlaveSimulator { UnitId = 0x11 };
+        var codec = new ModbusTcpCodec();
+        var observer = new CollectingFrameObserver();
+        var channel = new LoopbackChannel(slave.CreateResponder(codec), responseDelayMs: 1);
+        var options = new SessionOptions
+        {
+            ResponseTimeoutMs = 300,
+            RetryCount = 0,
+            TurnaroundDelayMs = 1,
+            IsSerial = false,
+            SuppressEcho = false
+        };
+        var session = new ModbusSession(channel, codec, options, observer);
+        await session.ConnectAsync();
+
+        var declaredRead = ModbusRequests.Read(DataArea.HoldingRegisters, 0, 1);
+        var writeFrame = codec.BuildAdu(ModbusRequests.WriteSingleRegister(5, 0x4444).ToBytes(), 0x11, 1);
+
+        var result = await session.ExecuteAsync(new ModbusRequest(0x11, declaredRead, RawAdu: writeFrame));
+
+        Assert.Equal(ExchangeStatus.Rejected, result.Status);
+        Assert.Equal(Comm.Core.Errors.ErrorCodes.ValidationRawAduMismatch, result.Error!.Code);
+        Assert.Equal(0, session.Statistics.TxCount);
+        Assert.DoesNotContain(observer.Records, r => r.Direction == FrameDirection.Tx);
+
+        await session.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Consistent_raw_adu_write_still_succeeds()
+    {
+        var (session, slave, _) = CreateRtu();
+        await session.ConnectAsync();
+
+        var codec = new ModbusRtuCodec();
+        var pdu = ModbusRequests.WriteSingleRegister(6, 0x5555);
+        var frame = codec.BuildAdu(pdu.ToBytes(), 1);
+
+        // 声明与字节完全一致 + 已确认：保留合法路径
+        var result = await session.ExecuteAsync(new ModbusRequest(1, pdu, Confirmed: true, RawAdu: frame));
+
+        Assert.Equal(ExchangeStatus.Ok, result.Status);
+        Assert.Equal((ushort)0x5555, slave.HoldingRegisters[6]);
+        Assert.Equal(1, session.Statistics.TxCount);
+
+        await session.DisposeAsync();
+    }
 }

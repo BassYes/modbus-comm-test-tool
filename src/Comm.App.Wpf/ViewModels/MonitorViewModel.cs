@@ -85,9 +85,10 @@ public partial class MonitorViewModel : ObservableObject, IDisposable
 
     private void RefreshStatus()
     {
-        StatusText = $"共采集 {Monitor.TotalCount} 条；当前显示 {Monitor.Rows.Count} 条" +
+        // 作用域说明（审计 F-04）：采集/丢弃计数是总线级的，显示行数是本会话的。
+        StatusText = $"总线累计采集 {Monitor.TotalCount} 条（全部会话）；本会话显示 {Monitor.Rows.Count} 条" +
                      (Monitor.DroppedFromDisplay > 0 ? $"；显示缓冲已丢弃 {Monitor.DroppedFromDisplay} 条（落盘不受影响）" : string.Empty) +
-                     (Monitor.IsRecording ? $"；正在记录到 {Monitor.RecordingFile}" : "；未记录到文件");
+                     (Monitor.IsRecording ? $"；正在记录到 {Monitor.RecordingFile}（全局）" : "；未记录到文件");
     }
 
     [RelayCommand]
@@ -95,7 +96,7 @@ public partial class MonitorViewModel : ObservableObject, IDisposable
     {
         Monitor.Clear();
         DetailText = "选中一行报文可查看详情与解析。";
-        Message = "已清空显示缓冲（不影响已记录的文件）。";
+        Message = "已清空本会话的显示行（不影响其它会话，也不影响已记录的文件）。";
     }
 
     [RelayCommand]

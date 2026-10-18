@@ -145,6 +145,13 @@ public sealed class ModbusMaster : IAsyncDisposable
                 ErrorCategory.Transport, Severity.Error, "会话未启动，请先连接"));
         }
 
+        if (!TryValidateFinalAdu(request, out var aduError))
+        {
+            Statistics.IncRejected();
+            return new ExchangeResult(ExchangeStatus.Rejected, request.UnitId, request.Pdu.Function,
+                Array.Empty<byte>(), null, null, null, 0, TimeSpan.Zero, aduError);
+        }
+
         if (GuardReject(request, out var rejectError))
         {
             Statistics.IncRejected();
@@ -172,6 +179,101 @@ public sealed class ModbusMaster : IAsyncDisposable
 
         using var registration = cancellationToken.Register(() => completion.TrySetResult(CancelledResult(request)));
         return await completion.Task.ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 按"最终要写进总线的字节"校验请求（审计 F-01）。
+    /// <para>
+    /// 背景：<see cref="ModbusRequest"/> 允许同时携带声明的 <see cref="ModbusRequest.Pdu"/> /
+    /// <see cref="ModbusRequest.UnitId"/> 和一段原始 ADU；原实现只用声明字段判断"是不是写/是不是广播"，
+    /// 实际发送的却是 <see cref="ModbusRequest.RawAdu"/>——于是"声明一次读 + 原始帧里塞一条写"
+    /// 或"声明普通地址 + 原始帧广播"可以绕过写确认与广播确认。
+    /// </para>
+    /// <para>
+    /// 现在在入队前先解码最终帧，要求：校验合法、Unit ID 相同、功能码相同、PDU 逐字节相同。
+    /// 任一不符立即拒绝，且**不产生任何 TX**（<see cref="SessionStatistics.TxCount"/> 不增加）。
+    /// 通过校验后，后续写门禁（<see cref="GuardReject"/>）依据的声明字段与实际字节已必然一致。
+    /// </para>
+    /// </summary>
+    private bool TryValidateFinalAdu(ModbusRequest request, out ErrorInfo error)
+    {
+        error = null!;
+
+        var raw = request.RawAdu;
+        if (raw is null || raw.Length == 0) return true;   // 未提供原始帧：由声明字段构建，天然一致
+
+        var validation = _codec.Validate(raw);
+        if (!validation.IsValid && !request.AllowInvalidFrame)
+        {
+            error = new ErrorInfo(ErrorCodes.ValidationRawAduMismatch, ErrorCategory.Validation, Severity.Error,
+                $"拒绝发送：原始帧与当前协议（{_codec.Name}）不匹配——{validation.Message}",
+                Hint: "原始帧必须能被声明字段完整解释；请重新生成报文，或改用字段构建方式提交");
+            return false;
+        }
+
+        var unitId = _codec.TryGetUnitId(raw);
+        var function = _codec.TryGetFunctionCode(raw);
+        if (unitId is null || function is null)
+        {
+            error = new ErrorInfo(ErrorCodes.ValidationRawAduMismatch, ErrorCategory.Validation, Severity.Error,
+                "拒绝发送：无法从原始帧解析从站地址或功能码",
+                Hint: "请检查报文长度与协议格式；无法可靠识别的原始帧不得发送");
+            return false;
+        }
+
+        if (unitId.Value != request.UnitId)
+        {
+            error = new ErrorInfo(ErrorCodes.ValidationRawAduMismatch, ErrorCategory.Validation, Severity.Error,
+                $"拒绝发送：原始帧的从站地址 0x{unitId.Value:X2} 与声明的 0x{request.UnitId:X2} 不一致",
+                Hint: "广播确认与写确认按声明字段判定，声明与字节不一致会绕过安全门禁；请让二者保持一致");
+            return false;
+        }
+
+        if (function.Value != request.Pdu.Function)
+        {
+            error = new ErrorInfo(ErrorCodes.ValidationRawAduMismatch, ErrorCategory.Validation, Severity.Error,
+                $"拒绝发送：原始帧的功能码 0x{function.Value:X2} 与声明的 0x{request.Pdu.Function:X2} 不一致",
+                Hint: "写操作确认按声明功能码判定，声明与字节不一致会绕过写门禁；请让二者保持一致");
+            return false;
+        }
+
+        ReadOnlySpan<byte> pduBytes;
+        if (_codec.ChecksumLength == 0)
+        {
+            // Modbus TCP：MBAP 7 字节（事务 2 + 协议 2 + 长度 2 + 单元 1），其后是 PDU。
+            if (raw.Length < 8)
+            {
+                error = new ErrorInfo(ErrorCodes.ValidationRawAduMismatch, ErrorCategory.Validation, Severity.Error,
+                    "拒绝发送：Modbus TCP 帧不足 8 字节（MBAP + 功能码）");
+                return false;
+            }
+
+            pduBytes = raw.AsSpan(7);
+        }
+        else
+        {
+            // Modbus RTU：从站地址 1 + PDU + 校验 2。
+            if (raw.Length < 4)
+            {
+                error = new ErrorInfo(ErrorCodes.ValidationRawAduMismatch, ErrorCategory.Validation, Severity.Error,
+                    "拒绝发送：Modbus RTU 帧不足 4 字节（地址 + 功能码 + 校验）");
+                return false;
+            }
+
+            pduBytes = raw.AsSpan(1, raw.Length - 3);
+        }
+
+        var declaredPdu = request.Pdu.ToBytes();
+        if (!pduBytes.SequenceEqual(declaredPdu))
+        {
+            error = new ErrorInfo(ErrorCodes.ValidationRawAduMismatch, ErrorCategory.Validation, Severity.Error,
+                "拒绝发送：原始帧的 PDU 与声明的 PDU 不一致",
+                Detail: $"声明 {Convert.ToHexString(declaredPdu)}，帧内 {Convert.ToHexString(pduBytes)}",
+                Hint: "同一条请求的声明字段与实际字节必须完全一致，否则写门禁判断的不是真正要发出去的报文");
+            return false;
+        }
+
+        return true;
     }
 
     /// <summary>写操作与广播的强制守卫（见规划 15.7）：位于事务层入口，脚本入口同样受约束。</summary>

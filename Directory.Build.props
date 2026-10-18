@@ -13,9 +13,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <NeutralLanguage>zh-CN</NeutralLanguage>
 
-    <Version>0.4.0</Version>
-    <AssemblyVersion>0.4.0.0</AssemblyVersion>
-    <FileVersion>0.4.0.0</FileVersion>
+    <Version>0.4.1</Version>
+    <AssemblyVersion>0.4.1.0</AssemblyVersion>
+    <FileVersion>0.4.1.0</FileVersion>
     <Product>通讯测试工具</Product>
     <Company>通讯测试工具项目组</Company>
     <Copyright>Copyright © 2026 通讯测试工具项目组</Copyright>

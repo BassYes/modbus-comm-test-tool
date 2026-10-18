@@ -36,6 +36,12 @@ public sealed record HelperServerOptions
 
     /// <summary>是否校验调用方进程标识（仅在 <see cref="ParentProcessId"/> 有值时生效）。</summary>
     public bool VerifyClientProcess { get; init; } = true;
+
+    /// <summary>
+    /// 生产模式：必须提供 <see cref="ParentProcessId"/>，否则拒绝一切请求（审计 F-02 的 fail closed）。
+    /// 单元测试与自检不设置本项。
+    /// </summary>
+    public bool RequireParentProcessId { get; init; }
 }
 
 /// <summary>add-aux / remove-aux 的负载（规划 4.8.1、R-13）：形如 <c>{"address":"192.168.1.50","prefixLength":24}</c>。</summary>
@@ -144,12 +150,9 @@ public sealed class HelperServer : IDisposable
                 NamedPipeServerStream? server = null;
                 try
                 {
-                    server = new NamedPipeServerStream(
-                        HelperProtocol.PipeName(_options.PipeName),
-                        PipeDirection.InOut,
-                        1,
-                        PipeTransmissionMode.Byte,
-                        PipeOptions.Asynchronous);
+                    server = HelperPipeSecurity.CreateServer(HelperProtocol.PipeName(_options.PipeName),
+                        _options.ParentProcessId, out var aclNote);
+                    if (aclNote is not null) _log.Warning(aclNote, "12.5");
 
                     await server.WaitForConnectionAsync(token).ConfigureAwait(false);
                 }
@@ -179,7 +182,7 @@ public sealed class HelperServer : IDisposable
                 {
                     // 每条连接 = 一条请求 + 一条响应（同步处理，天然串行，避免并发写网卡）。
                     TouchActivity();
-                    HandleConnection(server);
+                    await HandleConnectionAsync(server).ConfigureAwait(false);
                 }
 
                 if (ShouldExitAfterRequest()) break;
@@ -231,7 +234,7 @@ public sealed class HelperServer : IDisposable
     // 连接处理与命令分发
     // -----------------------------------------------------------------------------------------
 
-    private void HandleConnection(NamedPipeServerStream server)
+    private async Task HandleConnectionAsync(NamedPipeServerStream server)
     {
         Interlocked.Increment(ref _requestCount);
 
@@ -240,6 +243,11 @@ public sealed class HelperServer : IDisposable
 
         if (!TryVerifyClientProcess(server, out var denial))
         {
+            // 关键：即使要拒绝，也必须先把对端的请求读掉。
+            // 在"入站数据未读取"的命名管道上直接同步写响应，会在 Windows 上互等到超时
+            // （客户端阻塞在读、服务端阻塞在写）——这是实测出来的坑，不是理论担心。
+            // 读取有 2 秒上限：对"连上但不发数据"的探测进程不会无限占用服务循环。
+            await DrainRequestAsync(server, TimeSpan.FromSeconds(2)).ConfigureAwait(false);
             response = denial!;
         }
         else
@@ -261,6 +269,32 @@ public sealed class HelperServer : IDisposable
             _log.Info("收到 shutdown 命令，准备退出", "12.5");
             RequestExit();
         }
+    }
+
+    /// <summary>丢弃一条入站请求（有上限），返回是否在超时前读到。</summary>
+    private static async Task<bool> DrainRequestAsync(Stream stream, TimeSpan timeout)
+    {
+        var read = Task.Run(() =>
+        {
+            try
+            {
+                HelperProtocol.ReadMessage(stream);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        });
+
+        var finished = await Task.WhenAny(read, Task.Delay(timeout)).ConfigureAwait(false);
+        if (finished != read)
+        {
+            // 超时：不再等待，管道随后释放会让后台读取自然结束。
+            return false;
+        }
+
+        return read.Result;
     }
 
     private HelperResponse ProcessRequest(NamedPipeServerStream server, out bool shutdownRequested)
@@ -331,6 +365,18 @@ public sealed class HelperServer : IDisposable
                         : "无未确认的安全恢复倒计时"));
 
                 case HelperCommands.Shutdown:
+                    // 审计 F-03：武装期间绝不允许退出——否则"主程序崩溃也能自动恢复"的安全网会被一条
+                    // shutdown 命令（或主程序关窗）直接拆掉。到期或用户确认后才允许退出。
+                    if (Countdown.IsArmed)
+                    {
+                        _log.Warning(
+                            $"拒绝 shutdown：安全恢复倒计时仍武装（剩余 {Countdown.RemainingSeconds} 秒），助手继续运行",
+                            "4.8.3");
+                        return WithCountdown(HelperResponse.Fail(ErrorCodes.PlatformNetConfigPendingRollback,
+                            $"安全恢复倒计时仍武装（剩余 {Countdown.RemainingSeconds} 秒），助手必须继续运行；" +
+                            "请先在主程序点击“保留此配置”，或等待到期自动回滚"));
+                    }
+
                     shutdownRequested = true;
                     return WithCountdown(HelperResponse.Ok(null, "助手即将退出"));
 
@@ -532,6 +578,10 @@ public sealed class HelperServer : IDisposable
     private bool ShouldExitAfterRequest()
     {
         if (_exitRequested) return true;
+
+        // 审计 F-03：倒计时武装期间就算达到单请求/请求上限也不退出，避免安全网随进程一起消失。
+        if (Countdown.IsArmed) return false;
+
         if (_options.SingleRequest) return true;
         return _options.MaxRequests > 0 && RequestCount >= _options.MaxRequests;
     }
@@ -598,29 +648,55 @@ public sealed class HelperServer : IDisposable
 
     /// <summary>
     /// 校验命名管道调用方进程。返回 false 时 <paramref name="denial"/> 为要回给客户端的拒绝响应。
-    /// 取不到 PID（老系统/异常）时放行并记警告：真正的安全边界是固定命令白名单 + 随机管道名，
-    /// 这里只是纵深防御，不能因为它让主程序完全用不了网卡功能。
+    /// <para>
+    /// 审计 F-02 修正：原实现"取不到 PID 就放行"（fail open），等于把固定命令白名单暴露给同机任意进程。
+    /// 现在改为 <b>fail closed</b>：
+    /// <list type="bullet">
+    /// <item>生产入口（<see cref="HelperServerOptions.RequireParentProcessId"/> = true）没有父进程标识时拒绝一切请求；</item>
+    /// <item>拿到父进程标识后，取不到调用方 PID 一律拒绝，不再"放行本次请求"；</item>
+    /// <item>只有显式关闭 <see cref="HelperServerOptions.VerifyClientProcess"/>（单元测试）才跳过校验。</item>
+    /// </list>
+    /// </para>
     /// </summary>
     private bool TryVerifyClientProcess(NamedPipeServerStream server, out HelperResponse? denial)
     {
         denial = null;
 
+        if (!_options.VerifyClientProcess) return true;
+
         var expected = _options.ParentProcessId;
-        if (expected is null || !_options.VerifyClientProcess) return true;
+        if (expected is null)
+        {
+            if (_options.RequireParentProcessId)
+            {
+                _log.Error("拒绝连接：助手启动时未收到 --parent，已按安全策略拒绝所有请求", "12.5");
+                denial = HelperResponse.Fail(ErrorCodes.PlatformPermission,
+                    "助手未收到预期父进程标识（--parent），已拒绝本次请求；请由主程序拉起提权助手");
+                return false;
+            }
+
+            // 兼容：单请求模式/单元测试/自检等未指定父进程的场景。
+            return true;
+        }
 
         uint clientPid;
         try
         {
             if (!GetNamedPipeClientProcessId(server.SafePipeHandle, out clientPid))
             {
-                _log.Warning($"无法获取管道调用方进程标识（Win32 错误 {Marshal.GetLastWin32Error()}），放行本次请求", "12.5");
-                return true;
+                var code = Marshal.GetLastWin32Error();
+                _log.Error($"无法获取管道调用方进程标识（Win32 错误 {code}），按安全策略拒绝本次请求", "12.5");
+                denial = HelperResponse.Fail(ErrorCodes.PlatformPermission,
+                    $"无法校验调用方进程标识（Win32 错误 {code}），已拒绝本次请求");
+                return false;
             }
         }
         catch (Exception ex)
         {
-            _log.Warning($"校验调用方进程标识失败：{ex.GetType().Name}: {ex.Message}；放行本次请求", "12.5");
-            return true;
+            _log.Error($"校验调用方进程标识失败：{ex.GetType().Name}: {ex.Message}；按安全策略拒绝本次请求", "12.5");
+            denial = HelperResponse.Fail(ErrorCodes.PlatformPermission,
+                "无法校验调用方进程标识，已拒绝本次请求");
+            return false;
         }
 
         if (clientPid == (uint)expected.Value) return true;

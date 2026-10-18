@@ -80,6 +80,12 @@ public static class ErrorCodes
     /// <summary>网卡配置输入非法（IP/掩码/网关格式、掩码不连续、网络地址/广播地址、网关不同网段、地址重复）。</summary>
     public const string ValidationNetworkConfig = "VAL-4009";
 
+    /// <summary>
+    /// 原始帧与声明的 Unit ID / 功能码 / PDU 不一致（审计 F-01）：
+    /// 事务层按最终发送字节校验，防止"声明读、实际写"绕过写确认与广播确认。
+    /// </summary>
+    public const string ValidationRawAduMismatch = "VAL-4010";
+
     // 平台
     public const string PlatformPermission = "PLT-5001";
     public const string PlatformNotSupported = "PLT-5002";

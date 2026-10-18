@@ -45,7 +45,7 @@ public static class Program
             Sessions = new SessionSettings { MaxSessions = 2 }
         };
 
-        await using var bus = new FrameBus(20_000);
+        await using var bus = new FrameBus(20_000, new FrameFileWriter());
         await using var log = new LogGate(settings.Log);
         var ports = new SerialPortRegistry();
         var sessions = new SessionManager(bus, log, ports, settings);
@@ -95,6 +95,48 @@ public static class Program
         Check("会话 2 的监视只显示自己的帧",
             monitorB.Rows.All(r => r.SessionId == sessionB.SessionId) && monitorB.Rows.Count == framesB,
             $"显示 {monitorB.Rows.Count} / 应为 {framesB}");
+
+        // ③b 审计 F-04：显示类操作必须会话级，解析/记录是全局（且要跨会话同步）
+        var rowsBBefore = monitorB.Rows.Count;
+        monitorA.Clear();
+        Check("清空会话 1 的显示不影响会话 2",
+            monitorB.Rows.Count == rowsBBefore && rowsBBefore > 0,
+            $"会话 2 显示 {monitorB.Rows.Count}（清空前 {rowsBBefore}）");
+        Check("清空后会话 1 的显示行归零", monitorA.Rows.Count == 0, $"显示 {monitorA.Rows.Count}");
+
+        monitorA.ReapplyFilters();
+        Check("会话 1 仍可从总线重新提取自己的帧", monitorA.Rows.Count == framesA,
+            $"显示 {monitorA.Rows.Count} / 应为 {framesA}");
+
+        monitorA.DisplayPaused = true;
+        Check("暂停会话 1 的显示不影响会话 2（不再写入共享总线）", !monitorB.DisplayPaused);
+        monitorA.DisplayPaused = false;
+
+        monitorA.ParseEnabled = false;
+        Check("解析开关是全局的：会话 1 关闭后会话 2 同步", !monitorB.ParseEnabled && !bus.ParseEnabled);
+        monitorA.ParseEnabled = true;
+        Check("重新开启解析同样跨会话同步", monitorB.ParseEnabled && bus.ParseEnabled);
+
+        // 本机受限环境对系统 TEMP 没有写权限，探针统一写在自己的输出目录下。
+        var captureDir = Path.Combine(AppContext.BaseDirectory, "probe-capture-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(captureDir);
+        var recordError = monitorA.StartRecording(captureDir);
+        Check("可在会话 1 开始记录（全局）", recordError.Length == 0, recordError);
+        Check("记录状态与文件名同步到会话 2",
+            monitorB.IsRecording && monitorB.RecordingFile == monitorA.RecordingFile,
+            $"会话 1 {monitorA.RecordingFile} / 会话 2 {monitorB.RecordingFile}");
+
+        monitorB.StopRecording();
+        Check("在会话 2 停止记录后会话 1 也变为未记录",
+            !monitorA.IsRecording && !monitorB.IsRecording);
+        try
+        {
+            Directory.Delete(captureDir, true);
+        }
+        catch (Exception)
+        {
+            // 探针不因临时目录清理失败而失败
+        }
 
         // ④ 串口独占（规划 21.2.2 第 4 点）：登记表层面必须拒绝第二个会话
         var serialProfile = new SerialProfile { PortName = "COM99", BaudRate = 9600 };

@@ -36,10 +36,11 @@ public sealed class FrameBus : IFrameObserver, IAsyncDisposable
     public int DisplayCapacity { get; }
 
     /// <summary>解析开关：关闭时不做任何解析（不影响通信与记录，见 4.6.4）。</summary>
+    /// <remarks>
+    /// 本属性在采集端生效，因此天然是<b>应用级</b>开关（审计 F-04）：
+    /// 界面层通过 <c>MonitorSharedState</c> 暴露它，并标注"全局"，不再假装它是会话级状态。
+    /// </remarks>
     public bool ParseEnabled { get; set; } = true;
-
-    /// <summary>暂停显示：只暂停界面投递，落盘与通信不受影响（见 4.6.3）。</summary>
-    public bool DisplayPaused { get; set; }
 
     public long TotalCount => Interlocked.Read(ref _totalCount);
     public long DroppedFromDisplay => Interlocked.Read(ref _droppedFromDisplay);
@@ -109,8 +110,7 @@ public sealed class FrameBus : IFrameObserver, IAsyncDisposable
 
     private void OnNotifyTick(object? sender, ElapsedEventArgs e)
     {
-        if (DisplayPaused) return;
-
+        // 审计 F-04：暂停显示改为会话级（各 MonitorService 自己判断），总线不再持有"全局暂停"状态。
         long last = LastIndex;
         long from = Interlocked.Read(ref _notifiedIndex);
         if (last <= from) return;

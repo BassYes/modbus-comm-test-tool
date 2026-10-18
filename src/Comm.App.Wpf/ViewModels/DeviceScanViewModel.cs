@@ -433,13 +433,14 @@ public partial class DeviceScanViewModel : ObservableObject, IDisposable
             $"地址范围 {options.StartAddress}~{options.EndAddress}，超时 {options.ResponseTimeoutMs} ms，" +
             $"原参数 {originalText}");
 
+        // 审计 F-06：服务实例提到 try 外面，取消/异常分支才能读到"恢复是否真的成功"。
+        var service = new ParameterScanService(
+            () => _session.Current,
+            _session,
+            message => _app.Log.Info("ParameterScan", message));
+
         try
         {
-            var service = new ParameterScanService(
-                () => _session.Current,
-                _session,
-                message => _app.Log.Info("ParameterScan", message));
-
             var result = await service
                 .ScanAsync(options, _gate, BuildProgress(), BuildItemProgress(), _cts!.Token)
                 .ConfigureAwait(true);
@@ -468,7 +469,23 @@ public partial class DeviceScanViewModel : ObservableObject, IDisposable
         }
         catch (OperationCanceledException)
         {
-            StatusMessage = $"参数扫描已停止。已收集 {Items.Count} 条结果；原串口参数已恢复。";
+            // 审计 F-06：取消时不能无条件宣称"已恢复"。服务在 finally 里真的做了恢复，
+            // 结果只能通过 LastRestore 读到；读不到就如实说"状态未知"。
+            var restore = service.LastRestore;
+            if (restore is { Success: true })
+            {
+                StatusMessage = $"参数扫描已停止。已收集 {Items.Count} 条结果；原串口参数已恢复。";
+            }
+            else
+            {
+                var reason = restore?.Error ?? "扫描在恢复步骤之前就被中断，未能确认串口参数状态";
+                StatusMessage = $"参数扫描已停止。已收集 {Items.Count} 条结果；警告：原串口参数恢复未确认（{reason}）。";
+                _app.Log.Error("ParameterScan", $"取消后恢复原串口参数未确认：{reason}");
+                _app.Dialogs.Error("串口参数可能未恢复",
+                    $"扫描已停止，但恢复原串口参数未确认：{reason}\n\n" +
+                    "连接已置为“未连接”。请在连接中心重新选择串口与参数并确认设备可达，再开始下一次扫描。");
+            }
+
             _app.Log.Info("DeviceScan", "参数扫描被用户停止");
         }
         catch (CommException ex)
@@ -478,9 +495,17 @@ public partial class DeviceScanViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            StatusMessage = $"参数扫描异常终止：{ex.Message}";
+            // 异常终态同样要如实反映恢复结果（审计 F-06）
+            var restoreNote = service.LastRestore switch
+            {
+                { Success: true } => "；原串口参数已恢复",
+                { Success: false } r => $"；警告：原串口参数恢复失败（{r.Error}），连接已置为“未连接”",
+                _ => "；串口参数恢复状态未确认"
+            };
+
+            StatusMessage = $"参数扫描异常终止：{ex.Message}{restoreNote}";
             _app.Log.Error("DeviceScan", "参数扫描异常终止", ex);
-            _app.Dialogs.Error("参数扫描失败", ex.Message);
+            _app.Dialogs.Error("参数扫描失败", ex.Message + restoreNote);
         }
         finally
         {

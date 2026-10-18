@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 交接方向 | M1（通信核心）→ M2（寄存器定位 / 局域网发现 / 持久化） |
-| 交接对象 | `E:\Download\DSH\通讯测试工具-v0.1`（本仓库） |
+| 交接对象 | `E:\Download\DSH\通讯测试工具`（本仓库） |
 | 依据文档 | `E:\Download\DSH\通讯测试工具\通讯测试工具-产品与功能规划.md`（下称“规划”） |
 | 交接状态 | M1 已交付并自测通过：构建 0 错误 0 警告，113 个用例全绿，程序可启动且 7 个功能页正常 |
 | M2 状态 | **已交付 v0.2**：M2-1～M2-4 全部完成，并完成第 13 章的反馈修复与 R-17/R-18/R-19；构建 **0 错误 0 警告**，测试 **通过 178，失败 0**，10 个功能页均可正常打开与关闭；详见 `docs/m2-交付说明.md` |
@@ -68,7 +68,7 @@
 # 本机未装 Visual Studio；系统默认 dotnet 只有 SDK 3.0.101，不能用于本仓库
 DOTNET=C:/Users/Bass/.dotnet/dotnet.exe        # SDK 8.0.426（用户目录安装，未注册 PATH）
 
-cd "E:/Download/DSH/通讯测试工具-v0.1"
+cd "E:/Download/DSH/通讯测试工具"
 $DOTNET build CommTestTool.sln                 # 期望：0 个错误 0 个警告
 $DOTNET run --project tests/Comm.TestRunner    # 期望：总计：通过 113，失败 0
 $DOTNET run --project src/Comm.App.Wpf         # 运行界面

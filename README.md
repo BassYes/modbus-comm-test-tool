@@ -1,11 +1,11 @@
-﻿# 通讯测试工具 v0.4.0（Modbus RTU / Modbus TCP 现场调试）
+﻿# 通讯测试工具 v0.4.1（Modbus RTU / Modbus TCP 现场调试）
 
 按《通讯测试工具-产品与功能规划》实施的可运行版本：**M1 通信核心 + M2 定位与发现 + M2.5 稳定化与可分发基线 + M3 网络配置与扩展 + M4 加固与发布**。
 
 界面截图见 `docs/screenshot-*.png`（截图为 10 页时的版本，当前为 **12 个功能页**，另有 `-min900x480` 最小窗口版本）。
 **现场使用请先看 [用户手册](docs/用户手册.md)**。
 
-里程碑说明：M1 交接与反馈修复见 [`m1-handoff.md`](m1-handoff.md)；M2 见 [`docs/m2-交付说明.md`](docs/m2-交付说明.md)；
+里程碑说明：M1 交接与反馈修复见 [`m1-handoff.md`](docs/m1-handoff.md)；M2 见 [`docs/m2-交付说明.md`](docs/m2-交付说明.md)；
 M2.5 见 [`docs/m2.5-交付说明.md`](docs/m2.5-交付说明.md)；M3 见 [`docs/m3-交付说明.md`](docs/m3-交付说明.md)；
 **M4（当前版本）见 [`docs/m4-交付说明.md`](docs/m4-交付说明.md)**；
 v1.0 验收状态见 [`docs/v1.0-验收清单.md`](docs/v1.0-验收清单.md)，安全回归见 [`docs/security-regression.md`](docs/security-regression.md)；
@@ -36,7 +36,7 @@ v1.0 验收状态见 [`docs/v1.0-验收清单.md`](docs/v1.0-验收清单.md)，
 | R-20 | 消除“无法验证发布者”警告 | **M2.5**：签名流水线可运行（测试证书联调）、便携包附解除锁定脚本、证书采购清单与验证矩阵已交付；正式证书待定案（Q-1） |
 | R-21 | 适配其他电脑 | **M2.5**：默认 Release 自包含发布、数据目录回退、DPI/执行级别 manifest、应用图标与版本资源、最小窗口 900×480、导出用 `InvariantCulture`、串口与网卡兼容提示、环境自检、版本号单一来源 |
 
-另外实现的能力：会话统计（TX/RX/超时/校验错误/异常响应/未匹配/回显/拒绝）、任务进度与暂停/停止、结果导出 CSV（设备 / 数据 / 定位 / 监视表 / 局域网）、崩溃报告与诊断包、`--page=N` 直接打开指定功能页（1–11）、设置页“环境自检”（系统/DPI/串口驱动/网卡/签名与 MOTW，仅本机生成不上传）。
+另外实现的能力：会话统计（TX/RX/超时/校验错误/异常响应/未匹配/回显/拒绝）、任务进度与暂停/停止、结果导出 CSV（设备 / 数据 / 定位 / 监视表 / 局域网）、崩溃报告与诊断包、`--page=N` 直接打开指定功能页（1–12，会话页 1–8、全局页 9–12）、设置页“环境自检”（系统/DPI/串口驱动/网卡/签名与 MOTW，仅本机生成不上传）。
 
 **M3b 另交付**：工作区/项目文件（`.ctws`，含方案/模板/设备目标/网卡方案，支持替换与合并导入、损坏备份、高版本只读）、架构测试（依赖方向白名单与 WPF 隔离等 15 项断言）、多会话验收探针 `tools/Comm.SessionProbe`（23 项，进程内 TCP 模拟器）。
 
@@ -47,7 +47,7 @@ v1.0 验收状态见 [`docs/v1.0-验收清单.md`](docs/v1.0-验收清单.md)，
 ## 2. 工程结构
 
 ```text
-通讯测试工具-v0.1/
+通讯测试工具/
   src/
     Comm.Core/                 领域模型、错误码、传输/编解码契约、报文记录、暂停门（无外部依赖）
     Comm.Protocols.Modbus/     CRC-16、RTU/TCP 成帧、PDU 编解码、解析、地址换算
@@ -62,7 +62,7 @@ v1.0 验收状态见 [`docs/v1.0-验收清单.md`](docs/v1.0-验收清单.md)，
     Comm.Plugins.Host/         插件宿主（受信目录、清单校验、独立 ALC、故障隔离与自动禁用）
     Comm.Platform.Windows/     IP Helper 网卡读写后端、配置校验与服务、提权助手客户端、快照
     Comm.NetConfigHelper/      网卡配置提权助手（独立进程，requireAdministrator，固定命令集）
-    Comm.App.Wpf/              WPF 界面（MVVM + 依赖注入），11 个功能页（会话页 7 + 全局页 4）
+    Comm.App.Wpf/              WPF 界面（MVVM + 依赖注入），12 个功能页（会话页 8 + 全局页 4）
   samples/
     Comm.Plugin.Sample/        参考示例插件（报文解析器 + 导出格式，只读、不依赖 WPF）
   tools/
@@ -97,7 +97,7 @@ v1.0 验收状态见 [`docs/v1.0-验收清单.md`](docs/v1.0-验收清单.md)，
 
 ```bash
 DOTNET=C:/Users/Bass/.dotnet/dotnet.exe        # SDK 8.0.426
-cd "E:/Download/DSH/通讯测试工具-v0.1"
+cd "E:/Download/DSH/通讯测试工具"
 $DOTNET build CommTestTool.sln                 # 构建全部
 $DOTNET run --project src/Comm.App.Wpf        # 运行界面
 ```
@@ -198,7 +198,7 @@ powershell -File tools/Invoke-SoakTest.ps1
 
 ## 6. 已知限制
 
-> 交接给 M2 的文档见 [`m1-handoff.md`](m1-handoff.md)（M2 范围、可复用资产、硬约束、陷阱清单、验收清单）；M2 范围对照、人工验证记录与后续建议见 [`docs/m2-交付说明.md`](docs/m2-交付说明.md)。
+> 交接给 M2 的文档见 [`m1-handoff.md`](docs/m1-handoff.md)（M2 范围、可复用资产、硬约束、陷阱清单、验收清单）；M2 范围对照、人工验证记录与后续建议见 [`docs/m2-交付说明.md`](docs/m2-交付说明.md)。
 
 - **正式代码签名证书未采购**（规划 Q-1）：已交付签名流水线（可对自有 exe/dll 全部签名 + 时间戳）与便携包
   解除锁定脚本，但对外分发前必须定案证书来源，详见 [`docs/code-signing-plan.md`](docs/code-signing-plan.md)。
@@ -235,3 +235,23 @@ powershell -File tools/Invoke-SoakTest.ps1
 4. **局域网排查**：网络工具算出网段 → 局域网扫描（先小范围）→ 对开放 502 的主机“设为 TCP 连接目标”后到连接中心连接；Modbus 识别默认关闭，需要时再勾选。
 3. **日志**：打开右上角“Debug 日志”开关（或在设置页开启），确认程序同级 `logs/` 下生成 `debug-*.log`；关闭开关后确认不再新建文件。
 4. 遇到问题请用设置页“复制诊断信息”或“生成诊断包”反馈（仅保存在本机，不会自动上传）。
+
+---
+
+## 8. v0.4.1 审计修复（2026-10-18）
+
+对照《通讯测试工具-v0.4-项目审计报告》的整改，按"真实可利用面 → 现场语义 → 低成本加固"顺序完成：
+
+| 编号 | 修复内容 | 关键位置 |
+|---|---|---|
+| F-01 | 事务层按**最终发送字节**校验：原始帧的协议/Unit ID/功能码/PDU 必须与声明字段逐项一致，否则拒绝且 TX=0；"允许发送校验错误帧"仍需显式开关，且不跳过字段一致性 | `Comm.Session/ModbusMaster.cs`、`SessionContracts.cs`（`AllowInvalidFrame`）、`ManualSendService.cs` |
+| F-02 | 提权助手身份校验改为 **fail closed**：启动必须带 `--parent`、取不到调用方 PID 一律拒绝；命名管道改用显式 ACL（当前用户 + 目标客户端用户 SID + SYSTEM/管理员） | `Comm.NetConfigHelper/HelperServer.cs`、`HelperPipeSecurity.cs`、`Program.cs`、`NetConfigHelperClient.cs` |
+| F-03 | 倒计时武装期间**拒绝 shutdown**（PLT-5009），服务循环结束后进程继续持有倒计时直到回滚/确认；客户端关窗前先查状态，武装时不再通知助手退出 | 同上 |
+| F-04 | 监视作用域明确化：暂停显示 / 清空显示改为**会话级**（不再写共享总线）；解析开关与 JSONL 记录收敛到 `MonitorSharedState`，跨会话同步并在 UI 标注"全局" | `App.Wpf/Services/MonitorService.cs`、`MonitorSharedState.cs`、`FrameBus.cs`、`MonitorView.xaml` |
+| F-05 | 插件入口路径规范化 + 目录边界 + 拒绝绝对路径/上级目录/重解析点 | `Comm.Plugins.Host/PluginHost.cs` |
+| F-06 | 参数扫描的恢复结果经 `LastRestore` 贯穿取消/异常终态，取消分支不再无条件宣称"已恢复"，失败时明确警示 | `Comm.Scanning/ParameterScanService.cs`、`DeviceScanViewModel.cs` |
+| F-07 | 局域网扫描**每次**确认范围与授权；循环写增加次数硬上限（默认 100）与写操作最小间隔 50 ms；广播循环写追加二次确认 | `LanScanViewModel.cs`、`ManualSendViewModel.cs` |
+| F-09 | 长跑脚本把内存漂移改成机器判定的失败门禁（增长 >20% 且 >32 MB 时退出码 2） | `tools/Invoke-SoakTest.ps1` |
+| F-11 | 修 README 交接链接、页数/`--page` 范围说明、`MainViewModel` 注释；全仓库旧目录名统一为 `通讯测试工具` | `README.md`、`MainViewModel.cs`、`docs/*.md` |
+
+自动化验证：Release 构建 0 警告 0 错误；`Comm.TestRunner` 455 用例全通过；`Comm.SessionProbe` 38 项全通过。

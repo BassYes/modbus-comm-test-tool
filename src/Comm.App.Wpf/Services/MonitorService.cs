@@ -20,19 +20,46 @@ public enum DirectionFilter
 /// <summary>
 /// 报文监视服务：显示缓冲、暂停显示、解析开关、过滤、保存（见规划 4.6）。
 /// 界面侧只保留有限条数，落盘不受显示丢弃影响。
+/// <para>
+/// 作用域（审计 F-04 修正）：
+/// <list type="bullet">
+/// <item><b>会话级</b>——暂停显示、清空显示、过滤、行集合：每实例独立，不再改写共享总线，
+///       因此 A 窗口暂停/清空不会影响 B 窗口。</item>
+/// <item><b>全局</b>——解析开关与 JSONL 记录：由 <see cref="MonitorSharedState"/> 统一持有，
+///       任一会话操作都会同步到所有会话，UI 上标注"全局"。</item>
+/// </list>
+/// </para>
 /// </summary>
-public partial class MonitorService : ObservableObject
+public partial class MonitorService : ObservableObject, IDisposable
 {
     private readonly FrameBus _bus;
     private readonly LogGate _log;
+    private readonly MonitorSharedState _shared;
     private long _uiIndex = -1;
+    private bool _syncingShared;
+    private bool _disposed;
 
-    public MonitorService(FrameBus bus, LogGate log, AppSettings settings, string? sessionIdFilter = null)
+    public MonitorService(FrameBus bus, LogGate log, AppSettings settings, string? sessionIdFilter = null,
+        MonitorSharedState? shared = null)
     {
         _bus = bus;
         _log = log;
         SessionIdFilter = sessionIdFilter;
-        ParseEnabled = bus.ParseEnabled;
+
+        // 未注入时自建（探针/单元测试场景）：行为与单会话一致，只是不跨实例同步。
+        _shared = shared ?? new MonitorSharedState(bus, log, settings.Monitor);
+        _shared.Changed += OnSharedStateChanged;
+
+        _syncingShared = true;
+        try
+        {
+            _parseEnabled = _shared.ParseEnabled;
+        }
+        finally
+        {
+            _syncingShared = false;
+        }
+
         UiCapacity = Math.Max(1000, settings.Monitor.UiCapacity);
         ColorizeDirections = settings.Monitor.ColorizeDirections;
         AutoScroll = settings.Monitor.AutoScroll;
@@ -99,57 +126,80 @@ public partial class MonitorService : ObservableObject
     public string FilterDescription =>
         $"方向={DirectionFilter}，从站={UnitFilter}，功能码={FunctionFilter}，文本={TextFilter}";
 
-    public bool IsRecording => _bus.Writer?.IsRecording ?? false;
-    public string? RecordingFile => _bus.Writer?.Path;
+    public bool IsRecording => _shared.IsRecording;
+    public string? RecordingFile => _shared.RecordingFile;
 
+    /// <summary>暂停显示（会话级）：只影响本会话的界面投递，不写入共享总线（审计 F-04）。</summary>
     partial void OnDisplayPausedChanged(bool value)
     {
-        _bus.DisplayPaused = value;
-        _log.Debug("Monitor", value ? "暂停显示（采集与记录继续）" : "恢复显示（补齐暂停期间的报文）");
-        // 恢复时不重置索引：下一个刷新节拍会把暂停期间积累的报文一次性补齐（见规划 4.6.3）。
+        _log.Debug("Monitor", value ? "暂停本会话显示（采集与记录继续）" : "恢复本会话显示（补齐暂停期间的报文）");
+        // 恢复时立即补投一次；暂停期间 _uiIndex 未推进，因此能一次补齐（见规划 4.6.3）。
+        if (!value) AppendNew();
     }
 
+    /// <summary>解析开关（全局）：写入 <see cref="MonitorSharedState"/>，由它同步到其它会话。</summary>
     partial void OnParseEnabledChanged(bool value)
     {
-        _bus.ParseEnabled = value;
-        _log.Debug("Monitor", value ? "启用报文解析" : "关闭报文解析（仍保留原始报文）");
+        if (_syncingShared) return;
+
+        _shared.ParseEnabled = value;
         ReapplyFilters();
+    }
+
+    /// <summary>全局状态（解析/记录）变化后同步本实例的界面状态。</summary>
+    private void OnSharedStateChanged(object? sender, EventArgs e)
+    {
+        _syncingShared = true;
+        try
+        {
+            ParseEnabled = _shared.ParseEnabled;
+        }
+        finally
+        {
+            _syncingShared = false;
+        }
+
+        OnPropertyChanged(nameof(IsRecording));
+        OnPropertyChanged(nameof(RecordingFile));
     }
 
     public string StartRecording(string directory)
     {
-        if (_bus.Writer is null) return "记录器不可用";
-        var path = System.IO.Path.Combine(directory, $"frames-{DateTime.Now:yyyyMMdd-HHmmss}.jsonl");
-        var error = _bus.Writer.Start(path);
-        if (error is null)
-        {
-            _log.Info("Monitor", $"开始记录报文：{path}");
-            OnPropertyChanged(nameof(IsRecording));
-            OnPropertyChanged(nameof(RecordingFile));
-        }
-        else
-        {
-            _log.Error("Monitor", error);
-        }
-        return error ?? string.Empty;
+        var error = _shared.StartRecording(directory);
+        OnPropertyChanged(nameof(IsRecording));
+        OnPropertyChanged(nameof(RecordingFile));
+        return error;
     }
 
     public void StopRecording()
     {
-        _bus.Writer?.Stop();
-        _log.Info("Monitor", "停止记录报文");
+        _shared.StopRecording();
         OnPropertyChanged(nameof(IsRecording));
+        OnPropertyChanged(nameof(RecordingFile));
     }
 
+    /// <summary>
+    /// 清空显示（<b>仅本会话</b>）：只丢掉本会话的行集合并把读取游标推到最新，
+    /// 不再调用 <see cref="FrameBus.Clear"/>——那会删掉其它会话正在看的记录（审计 F-04）。
+    /// </summary>
     public void Clear()
     {
-        _bus.Clear();
         Rows.Clear();
         _uiIndex = _bus.LastIndex;
         MatchedCount = 0;
         OnPropertyChanged(nameof(TotalCount));
         OnPropertyChanged(nameof(MatchedCount));
+        OnPropertyChanged(nameof(DroppedFromDisplay));
         RowsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>解除订阅（会话关闭时调用，避免共享状态与总线持有已废弃实例）。</summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _shared.Changed -= OnSharedStateChanged;
+        _bus.FramesAppended -= OnFramesAppended;
     }
 
     /// <summary>过滤条件变化后，从显示缓冲的可用起点重新提取（见规划 4.6.5）。</summary>

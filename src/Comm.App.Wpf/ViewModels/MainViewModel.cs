@@ -277,7 +277,7 @@ public partial class MainViewModel : ObservableObject
         RebuildNav();
     }
 
-    /// <summary>支持 --page=N 直接打开指定功能页（N：1~7 会话页面，8~10 全局页面）。</summary>
+    /// <summary>支持 --page=N 直接打开指定功能页（N：1~8 会话页面，9~12 全局页面，共 12 页）。</summary>
     private void ApplyStartupPageArgument()
     {
         try

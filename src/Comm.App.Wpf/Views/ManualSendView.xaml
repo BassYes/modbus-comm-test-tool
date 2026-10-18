@@ -124,6 +124,9 @@
                 <Button Content="循环发送 / 停止" Command="{Binding ToggleLoopCommand}" />
                 <TextBlock Text="间隔 ms" VerticalAlignment="Center" Margin="8,0,4,0" />
                 <TextBox Text="{Binding LoopIntervalMs}" Width="60" />
+                <TextBlock Text="次数上限" VerticalAlignment="Center" Margin="8,0,4,0" />
+                <TextBox Text="{Binding LoopMaxCount}" Width="60"
+                         ToolTip="循环发送达到该次数后自动停止；写操作最小间隔 50 ms，只读 10 ms" />
                 <CheckBox IsChecked="{Binding ExpectResponse}" Content="等待响应" />
                 <TextBlock Text="超时覆盖 ms（空=用会话默认）" VerticalAlignment="Center" Margin="8,0,4,0" />
                 <TextBox Text="{Binding TimeoutOverrideMs}" Width="70" />

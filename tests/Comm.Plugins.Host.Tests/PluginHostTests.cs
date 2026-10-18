@@ -314,6 +314,66 @@ public class PluginHostTests
     }
 
     [Fact]
+    public void Entry_assembly_with_parent_directory_escape_is_rejected()
+    {
+        var root = PluginTestFixtures.CreatePluginRoot();
+        try
+        {
+            Directory.CreateDirectory(root);
+
+            // 插件目录之外放一个真实程序集：清单用 ..\ 指向它就属于目录逃逸（审计 F-05）
+            File.Copy(Path.Combine(PluginTestFixtures.SamplePluginOutput, "Comm.Plugin.Sample.dll"),
+                Path.Combine(root, "outside.dll"), overwrite: true);
+
+            var directory = PluginTestFixtures.WriteManifest(root, "Escape",
+                """{"id":"escape","name":"逃逸插件","version":"1.0.0","hostVersionRange":"*","entry":"..\\outside.dll"}""");
+            Assert.True(Directory.Exists(directory));
+
+            using var host = CreateHost(root);
+            host.LoadAll();
+
+            var info = Assert.Single(host.Plugins);
+            Assert.Equal(PluginState.Invalid, info.State);
+            Assert.Contains(ErrorCodes.PluginManifestInvalid, info.Error);
+            Assert.Contains("上级目录", info.Error);
+        }
+        finally
+        {
+            PluginTestFixtures.Delete(root);
+        }
+    }
+
+    [Fact]
+    public void Entry_assembly_with_absolute_path_is_rejected()
+    {
+        var root = PluginTestFixtures.CreatePluginRoot();
+        try
+        {
+            Directory.CreateDirectory(root);
+            var outside = Path.Combine(root, "outside-abs.dll");
+            File.Copy(Path.Combine(PluginTestFixtures.SamplePluginOutput, "Comm.Plugin.Sample.dll"),
+                outside, overwrite: true);
+
+            var escaped = outside.Replace("\\", "\\\\");
+            var directory = PluginTestFixtures.WriteManifest(root, "Absolute",
+                $$"""{"id":"absolute","name":"绝对路径插件","version":"1.0.0","hostVersionRange":"*","entry":"{{escaped}}"}""");
+            Assert.True(Directory.Exists(directory));
+
+            using var host = CreateHost(root);
+            host.LoadAll();
+
+            var info = Assert.Single(host.Plugins);
+            Assert.Equal(PluginState.Invalid, info.State);
+            Assert.Contains(ErrorCodes.PluginManifestInvalid, info.Error);
+            Assert.Contains("绝对路径", info.Error);
+        }
+        finally
+        {
+            PluginTestFixtures.Delete(root);
+        }
+    }
+
+    [Fact]
     public void Directory_without_manifest_is_reported_as_invalid()
     {
         var root = PluginTestFixtures.CreatePluginRoot();

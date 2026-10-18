@@ -76,6 +76,12 @@ public partial class ManualSendViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _expectResponse = true;
     [ObservableProperty] private int? _timeoutOverrideMs;
     [ObservableProperty] private int _loopIntervalMs = 1000;
+
+    /// <summary>
+    /// 循环发送次数上限（审计 F-07）。循环写会反复修改设备数据，必须有一个硬上限：
+    /// 到达后自动停止，不允许"一次确认、无界发送"。
+    /// </summary>
+    [ObservableProperty] private int _loopMaxCount = 100;
     [ObservableProperty] private bool _isLooping;
     [ObservableProperty] private int _loopSentCount;
     [ObservableProperty] private string _responseText = "（尚无响应）";
@@ -386,26 +392,46 @@ public partial class ManualSendViewModel : ObservableObject, IDisposable
         var unit = service.Codec.TryGetUnitId(frame) ?? 0;
         bool broadcast = unit == 0;
         bool confirmed = true;
+        bool isWrite = ManualSendService.RequiresWriteConfirmation(unit, function, out _);
 
-        if (ManualSendService.RequiresWriteConfirmation(unit, function, out _))
+        // 审计 F-07：次数必须有硬上限；写操作（尤其广播写）的最低间隔不能低到"打爆总线"。
+        var maxCount = Math.Clamp(LoopMaxCount <= 0 ? 1 : LoopMaxCount, 1, 100_000);
+        int interval = Math.Max(isWrite ? 50 : 10, LoopIntervalMs);
+
+        if (isWrite)
         {
+            var limitText = $"最多发送 {maxCount} 次（到达上限自动停止），最小间隔 {interval} ms。";
+
             if (!_app.Dialogs.Confirm("循环写操作确认",
-                    $"即将每 {LoopIntervalMs} ms 向从站 {unit} 重复发送写报文：\n{HexUtil.ToHex(frame)}\n\n" +
-                    (broadcast ? "目标为广播地址，所有设备都会受影响。\n" : string.Empty) +
+                    $"即将每 {interval} ms 向从站 {unit} 重复发送写报文：\n{HexUtil.ToHex(frame)}\n\n" +
+                    limitText + "\n" +
+                    (broadcast ? "目标为广播地址，总线上所有设备都会受影响。\n" : string.Empty) +
                     "循环写会反复修改设备数据，确认继续？"))
             {
                 return Task.CompletedTask;
             }
+
+            // 广播循环写：在写确认之外再要一次专项确认（规划 15.7 对广播的更高要求）。
+            if (broadcast &&
+                !_app.Dialogs.Confirm("广播循环写二次确认",
+                    $"目标为广播地址 0：本次操作会让总线上所有从站反复执行写功能码 0x{function:X2}。\n\n" +
+                    "现场可能因此停机或误动作。确认已获得授权并承担影响后继续？"))
+            {
+                return Task.CompletedTask;
+            }
+
             confirmed = true;
         }
 
         _loopCts = new CancellationTokenSource();
         IsLooping = true;
         LoopSentCount = 0;
-        var token = _loopCts.Token;
-        int interval = Math.Max(10, LoopIntervalMs);
+        var loopCts = _loopCts;
+        var token = loopCts.Token;
 
-        _app.Log.Info("ManualSend", $"开始循环发送：{HexUtil.ToHex(frame)}，间隔 {interval} ms");
+        _app.Log.Info("ManualSend",
+            $"开始循环发送：{HexUtil.ToHex(frame)}，间隔 {interval} ms，上限 {maxCount} 次" +
+            (isWrite ? "（写操作）" : string.Empty));
 
         _ = Task.Run(async () =>
         {
@@ -425,6 +451,19 @@ public partial class ManualSendViewModel : ObservableObject, IDisposable
                         ResponseText = text;
                         AddHistory(line);
                     });
+
+                    // 审计 F-07：到达次数上限后自动停止，并明确告知（不是静默停）。
+                    if (LoopSentCount >= maxCount)
+                    {
+                        loopCts.Cancel();
+                        await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                        {
+                            IsLooping = false;
+                            StatusMessage = $"循环发送已达上限 {maxCount} 次，已自动停止。";
+                            AddHistory($"[{DateTime.Now:HH:mm:ss}] 循环发送达到上限 {maxCount} 次，已自动停止");
+                        });
+                        return;
+                    }
                 }
                 while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false));
             }

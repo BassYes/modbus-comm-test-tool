@@ -154,7 +154,9 @@ public sealed class ManualSendService
         }
 
         var request = new ModbusRequest(unitId, pdu, RequestPriority.Interactive, confirmedWrite, broadcastConfirmed,
-            Label: "手动发送", TimeoutMs: timeoutMs, RawAdu: frame, NoResponseExpected: !expectResponse);
+            Label: "手动发送", TimeoutMs: timeoutMs, RawAdu: frame, NoResponseExpected: !expectResponse,
+            // 只有用户显式勾选"允许发送校验错误帧"时才放行非法帧；字段一致性校验依然生效（审计 F-01）。
+            AllowInvalidFrame: allowBadChecksum);
 
         var result = await _session.ExecuteAsync(request, cancellationToken).ConfigureAwait(false);
 

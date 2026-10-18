@@ -69,8 +69,21 @@ internal static class Program
             PipeName = parsed.PipeName!,
             ParentProcessId = parsed.ParentProcessId,
             IdleExitMinutes = parsed.IdleExitMinutes,
-            SingleRequest = parsed.Once
+            SingleRequest = parsed.Once,
+            // 审计 F-02：生产入口必须携带 --parent，且服务端对取不到调用方 PID 的情况 fail closed。
+            // 没有 --parent 的助手不再是"少一层防御"，而是直接不可用（否则固定命令白名单会暴露给同机任意进程）。
+            RequireParentProcessId = true
         };
+
+        if (parsed.ParentProcessId is null)
+        {
+            _log.Error(
+                "缺少 --parent <pid>：助手拒绝在无法校验调用方身份的情况下运行（审计 F-02）。" +
+                "请由主程序拉起，或用于诊断时改用 --self-test。",
+                "12.5");
+            _log.Dispose();
+            return ExitBadArguments;
+        }
 
         INetworkAdapterBackend backend;
         try
@@ -109,9 +122,60 @@ internal static class Program
             return ExitFailure;
         }
 
+        // 审计 F-03：服务循环已结束但倒计时仍武装时，进程不能就这么退出——
+        // 否则"主程序崩溃/关窗也能自动恢复"的安全网会随进程一起消失。
+        await HoldUntilCountdownResolvedAsync(server, cts.Token).ConfigureAwait(false);
+
         _log.Info($"助手退出：共处理 {server.RequestCount} 条请求", "12.5");
         _log.Dispose();
         return ExitOk;
+    }
+
+    /// <summary>
+    /// 倒计时未决时保持进程存活：自己接管 1 秒节拍推进 <see cref="RollbackCountdown"/>，
+    /// 到期回滚或用户确认后才真正退出。安全上限比武装秒数多 30 秒，避免异常状态下永久驻留。
+    /// </summary>
+    private static async Task HoldUntilCountdownResolvedAsync(HelperServer server, CancellationToken cancellationToken)
+    {
+        if (!server.Countdown.IsArmed) return;
+
+        _log.Warning(
+            $"服务循环已结束，但安全恢复倒计时仍武装（剩余 {server.Countdown.RemainingSeconds} 秒）：" +
+            "助手保持运行直到自动回滚或用户确认（审计 F-03）",
+            "4.8.3");
+
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(server.Countdown.RemainingSeconds + 30);
+        while (server.Countdown.IsArmed && DateTimeOffset.UtcNow < deadline)
+        {
+            if (server.Countdown.Tick())
+            {
+                if (server.Countdown.LastError is null)
+                {
+                    _log.Info("安全恢复倒计时到期，已自动回滚到修改前配置", "15.8");
+                }
+                else
+                {
+                    _log.Error($"安全恢复倒计时到期，但自动回滚失败：{server.Countdown.LastError}；请按快照人工恢复", "15.8");
+                }
+
+                break;
+            }
+
+            try
+            {
+                await Task.Delay(500, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+        }
+
+        if (server.Countdown.IsArmed)
+        {
+            _log.Error($"等待倒计时结束超时（剩余 {server.Countdown.RemainingSeconds} 秒），助手退出；" +
+                       "未确认的网卡配置需要人工按快照恢复", "15.8");
+        }
     }
 
     /// <summary>

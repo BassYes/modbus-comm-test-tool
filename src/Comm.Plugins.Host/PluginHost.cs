@@ -358,13 +358,27 @@ public sealed class PluginHost : IDisposable
         }
     }
 
+    /// <summary>
+    /// 解析插件入口程序集（审计 F-05）。
+    /// <para>
+    /// 原实现把清单里的 <c>entry</c> 直接 <c>Path.Combine</c> 到插件目录并只看 <c>File.Exists</c>：
+    /// <c>..\..\evil.dll</c>、绝对路径或目录联接都能把入口指到插件目录之外，
+    /// 与"只加载受信目录"的承诺不符。现在统一走 <see cref="TryResolveInsidePluginDirectory"/>：
+    /// 规范化 + 目录边界 + 拒绝上级目录 + 拒绝重解析点。
+    /// </para>
+    /// </summary>
     private static string? ResolveEntryAssembly(string directory, PluginManifest manifest, out string? error)
     {
         error = null;
 
         if (!string.IsNullOrWhiteSpace(manifest.EntryAssembly))
         {
-            var candidate = System.IO.Path.Combine(directory, manifest.EntryAssembly);
+            if (!TryResolveInsidePluginDirectory(directory, manifest.EntryAssembly, out var candidate, out var reason))
+            {
+                error = $"清单声明的入口程序集被拒绝：{reason}";
+                return null;
+            }
+
             if (File.Exists(candidate)) return candidate;
 
             error = $"清单声明的入口程序集不存在：{manifest.EntryAssembly}";
@@ -376,6 +390,8 @@ public sealed class PluginHost : IDisposable
             ? Directory.GetFiles(directory, "*.dll")
                 .Where(f => !f.EndsWith("Comm.Plugins.Abstractions.dll", StringComparison.OrdinalIgnoreCase))
                 .Where(f => !f.EndsWith("Comm.Core.dll", StringComparison.OrdinalIgnoreCase))
+                .Where(f => !IsReparsePoint(f))     // 审计 F-05：软链接/目录联接的 dll 不当作本地插件
+                .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
                 .ToArray()
             : Array.Empty<string>();
 
@@ -385,6 +401,86 @@ public sealed class PluginHost : IDisposable
             ? "插件目录中没有程序集（也未见清单声明的 entry）"
             : $"插件目录中有 {assemblies.Length} 个程序集，清单必须用 entry 指明入口";
         return null;
+    }
+
+    /// <summary>
+    /// 把清单中的相对路径解析到插件目录内；越界、绝对路径、上级目录与重解析点一律拒绝。
+    /// </summary>
+    private static bool TryResolveInsidePluginDirectory(string directory, string relativePath, out string fullPath,
+        out string reason)
+    {
+        fullPath = string.Empty;
+        reason = string.Empty;
+
+        var relative = relativePath.Trim();
+        if (relative.Length == 0)
+        {
+            reason = "入口程序集路径为空";
+            return false;
+        }
+
+        if (System.IO.Path.IsPathRooted(relative) || relative.Contains(':', StringComparison.Ordinal))
+        {
+            reason = $"入口程序集必须是插件目录内的相对路径，不能是绝对路径（{relativePath}）";
+            return false;
+        }
+
+        var segments = relative.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Any(s => s == ".."))
+        {
+            reason = $"入口程序集路径不能包含上级目录（{relativePath}）";
+            return false;
+        }
+
+        string root;
+        try
+        {
+            root = System.IO.Path.GetFullPath(directory);
+            fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(root, relative));
+        }
+        catch (Exception ex)
+        {
+            reason = $"入口程序集路径无法解析（{ex.GetType().Name}）";
+            return false;
+        }
+
+        var rootWithSeparator = root.EndsWith(System.IO.Path.DirectorySeparatorChar)
+            ? root
+            : root + System.IO.Path.DirectorySeparatorChar;
+
+        if (!fullPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase))
+        {
+            reason = $"入口程序集解析后落在插件目录之外（{fullPath}）";
+            return false;
+        }
+
+        // 逐级检查重解析点：目录联接/符号链接可以让"看起来在目录内"的路径实际指向别处。
+        var current = fullPath;
+        while (!string.IsNullOrEmpty(current) && current.Length > root.Length)
+        {
+            if ((File.Exists(current) || Directory.Exists(current)) && IsReparsePoint(current))
+            {
+                reason = $"入口程序集路径经过重解析点（{current}），已拒绝";
+                return false;
+            }
+
+            current = System.IO.Path.GetDirectoryName(current) ?? string.Empty;
+        }
+
+        return true;
+    }
+
+    private static bool IsReparsePoint(string path)
+    {
+        try
+        {
+            return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
+        }
+        catch (Exception)
+        {
+            // 属性读不到时按"不可信"处理：宁可这个插件不加载，也不要冒险执行目录外的程序集。
+            return true;
+        }
     }
 
     private static ICommPlugin? CreatePlugin(Assembly assembly, PluginManifest manifest, out string? error)

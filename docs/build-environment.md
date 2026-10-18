@@ -7,7 +7,7 @@
 
 ```bash
 DOTNET=C:/Users/Bass/.dotnet/dotnet.exe
-cd "E:/Download/DSH/通讯测试工具-v0.1"
+cd "E:/Download/DSH/通讯测试工具"
 $DOTNET build CommTestTool.sln
 $DOTNET run --project src/Comm.App.Wpf
 ```

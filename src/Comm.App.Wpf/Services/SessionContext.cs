@@ -78,7 +78,8 @@ public sealed class SessionContext : IAsyncDisposable, ISerialReconfigurator, IS
         LogGate log,
         SerialPortRegistry ports,
         AppSettings settings,
-        Action<string, string?>? changed = null)
+        Action<string, string?>? changed = null,
+        MonitorSharedState? monitorShared = null)
     {
         SessionId = sessionId;
         Name = string.IsNullOrWhiteSpace(name) ? $"会话 {sessionId[..Math.Min(4, sessionId.Length)]}" : name;
@@ -88,7 +89,7 @@ public sealed class SessionContext : IAsyncDisposable, ISerialReconfigurator, IS
         _changed = changed;
         CreatedAt = DateTimeOffset.Now;
         LastUsedAt = CreatedAt;
-        Monitor = new MonitorService(frameBus, log, settings, sessionId);
+        Monitor = new MonitorService(frameBus, log, settings, sessionId, monitorShared);
         WatchList = new WatchListService(this, log);
     }
 
@@ -508,5 +509,8 @@ public sealed class SessionContext : IAsyncDisposable, ISerialReconfigurator, IS
         _disposed = true;
         await DisconnectAsync().ConfigureAwait(false);
         _ports.ReleaseAll(SessionId);
+
+        // 审计 F-04：解除监视投影对总线与共享状态的订阅，避免已关闭会话继续被投递/持有。
+        Monitor.Dispose();
     }
 }

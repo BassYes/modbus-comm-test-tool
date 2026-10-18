@@ -1,6 +1,6 @@
 ---
 name: commtool-build-test-workflow
-description: 通讯测试工具（E:\Download\DSH\通讯测试工具-v0.1）的构建、测试与自检命令
+description: 通讯测试工具（E:\Download\DSH\通讯测试工具）的构建、测试与自检命令
 type: reference
 ---
 

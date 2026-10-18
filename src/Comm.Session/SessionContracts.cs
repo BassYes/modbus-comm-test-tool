@@ -62,6 +62,15 @@ public sealed record ExchangeResult(
             TimeSpan.Zero, error);
 }
 
+/// <summary>
+/// 一次事务请求。<paramref name="Pdu"/>/<paramref name="UnitId"/> 是<b>声明</b>字段，
+/// <paramref name="RawAdu"/> 是<b>最终发送字节</b>（可选）；两者不一致时事务层直接拒绝（审计 F-01）。
+/// </summary>
+/// <remarks>
+/// <c>AllowInvalidFrame</c>：仅"允许发送校验错误帧"这类故障注入使用，默认 false。
+/// 置为 true 时跳过校验/长度合法性检查，但 <b>字段一致性检查仍然生效</b>——
+/// 否则它就成了绕过写确认的后门。
+/// </remarks>
 public sealed record ModbusRequest(
     byte UnitId,
     ModbusPdu Pdu,
@@ -72,7 +81,8 @@ public sealed record ModbusRequest(
     int? TimeoutMs = null,
     int? RetryCount = null,
     byte[]? RawAdu = null,
-    bool NoResponseExpected = false)
+    bool NoResponseExpected = false,
+    bool AllowInvalidFrame = false)
 {
     public bool IsWrite => Fn.IsWrite(Pdu.Function);
 

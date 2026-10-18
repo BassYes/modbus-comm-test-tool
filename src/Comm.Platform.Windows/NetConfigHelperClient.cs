@@ -129,6 +129,16 @@ public sealed class NetConfigHelperClient : INetConfigHelper
             return HelperResponse.Fail(ErrorCodes.PlatformHelperProtocol,
                 $"等待提权助手响应超时（{timeoutMs / 1000} 秒），请检查是否被安全软件拦截");
         }
+        catch (UnauthorizedAccessException ex)
+        {
+            // 审计 F-02：助手管道现在带 ACL（仅目标用户/主程序可连），被拒时给出可操作的提示，
+            // 不要混进"通信失败"里让现场误判成软件 bug。
+            StatusText = "无权连接提权助手";
+            Log("Error", $"连接提权助手被拒绝（管道 ACL）：{ex.Message}");
+            return HelperResponse.Fail(ErrorCodes.PlatformPermission,
+                "无权连接提权助手：命名管道的 ACL 只允许拉起它的用户与主程序。" +
+                "请确认主程序与提权助手以同一用户身份运行；如使用另一管理员账户提权，请改用该账户登录后重试");
+        }
         catch (TimeoutException ex)
         {
             // 15 秒内没连上管道：通常是助手没起来（UAC 未确认 / 被拦截），归为 PLT-5007 而不是协议错误。
@@ -147,14 +157,25 @@ public sealed class NetConfigHelperClient : INetConfigHelper
     }
 
     /// <summary>尽力让助手退出（助手在空闲超时后也会自行退出，这里是"现在就走"）。</summary>
+    /// <remarks>
+    /// 审计 F-03：若助手仍持有未确认的回滚倒计时，<b>不能</b>通知它退出——那样等于把"主程序退出后
+    /// 仍能自动恢复网卡"的安全网拆掉。此时只释放本地进程句柄，助手会继续驻留到确认或到期回滚。
+    /// </remarks>
     public void Dispose()
     {
         if (_pipeName is null) return;
 
         try
         {
-            // 短超时：关窗时不该被助手拖住。
-            Send(new HelperRequest { Command = HelperCommands.Shutdown }, 3_000);
+            if (IsRollbackArmed())
+            {
+                Log("Warning", "安全恢复倒计时仍武装：不通知助手退出，助手将保持运行直到确认或到期回滚");
+            }
+            else
+            {
+                // 短超时：关窗时不该被助手拖住。
+                Send(new HelperRequest { Command = HelperCommands.Shutdown }, 3_000);
+            }
         }
         catch (Exception ex)
         {
@@ -179,6 +200,22 @@ public sealed class NetConfigHelperClient : INetConfigHelper
             _process = null;
             _pipeName = null;
         }
+    }
+
+    /// <summary>
+    /// 查询助手是否仍持有未确认的回滚倒计时。查询失败时<b>保守地</b>当作"已武装"：
+    /// 误关助手会直接失去自动回滚，而多留一个空闲进程只是几 MB 内存（审计 F-03）。
+    /// </summary>
+    private bool IsRollbackArmed()
+    {
+        var status = Send(new HelperRequest { Command = HelperCommands.Status }, 3_000);
+        if (!status.IsSuccess)
+        {
+            Log("Warning", $"无法确认助手倒计时状态（{status.ToUserText()}），保守处理：不通知助手退出");
+            return true;
+        }
+
+        return status.RollbackArmed;
     }
 
     // -----------------------------------------------------------------------------------------
@@ -327,7 +364,9 @@ public sealed class RunAsHelperLauncher : IHelperLauncher
         var startInfo = new ProcessStartInfo
         {
             FileName = helperPath,
-            Arguments = $"--pipe {pipeName} --idle-min {idleExitMinutes}",
+            // 审计 F-02：必须把"预期调用方进程"告诉助手，否则助手无法区分本程序与同机其他进程。
+            // 这里就是本进程（客户端）的 PID：助手的管道校验只放行这个 PID。
+            Arguments = $"--pipe {pipeName} --parent {Environment.ProcessId} --idle-min {idleExitMinutes}",
             // UseShellExecute + runas 是唯一能触发 UAC 提权的托管方式。
             Verb = "runas",
             UseShellExecute = true

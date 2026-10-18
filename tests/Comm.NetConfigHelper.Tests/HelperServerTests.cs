@@ -409,6 +409,99 @@ public sealed class HelperServerTests
         await harness.RunTask.WaitAsync(TimeSpan.FromSeconds(10));
     }
 
+    // -----------------------------------------------------------------------------------------
+    // 审计 F-02 / F-03 回归：助手身份校验 fail closed + 武装期间拒绝退出
+    // -----------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Shutdown_WhileCountdownArmed_IsRejectedAndServerKeepsRunning()
+    {
+        var backend = FakeNetworkAdapterBackend.WithSampleAdapter(out var sample);
+
+        using var harness = new Harness(backend);
+        var run = harness.RunTask;
+
+        var applied = HelperPipeClient.Send(harness.PipeName, new HelperRequest
+        {
+            Command = HelperCommands.Apply,
+            AdapterId = sample.Id,
+            Payload = JsonSerializer.Serialize(
+                new NetworkConfigRequest { Address = "192.168.1.60", PrefixLength = 24, AutoRollbackSeconds = 600 },
+                HelperJson.Options)
+        });
+        Assert.True(applied.IsSuccess, applied.ToUserText());
+        Assert.True(harness.Server.Countdown.IsArmed);
+
+        // 审计 F-03：武装期间一条 shutdown 不能拆掉安全网
+        var shutdown = HelperPipeClient.Send(harness.PipeName, new HelperRequest { Command = HelperCommands.Shutdown });
+        Assert.False(shutdown.IsSuccess);
+        Assert.Equal(ErrorCodes.PlatformNetConfigPendingRollback, shutdown.ErrorCode);
+        Assert.True(shutdown.RollbackArmed);
+        Assert.Contains("倒计时", shutdown.Message!);
+
+        await Task.Delay(300);
+        Assert.False(run.IsCompleted);                       // 服务循环没被 shutdown 结束
+        Assert.True(harness.Server.Countdown.IsArmed);        // 倒计时仍在
+
+        // 确认后倒计时解除，此时才允许退出
+        var confirm = HelperPipeClient.Send(harness.PipeName, new HelperRequest { Command = HelperCommands.Confirm });
+        Assert.True(confirm.IsSuccess, confirm.ToUserText());
+        Assert.False(harness.Server.Countdown.IsArmed);
+
+        var shutdownAgain = HelperPipeClient.Send(harness.PipeName,
+            new HelperRequest { Command = HelperCommands.Shutdown });
+        Assert.True(shutdownAgain.IsSuccess, shutdownAgain.ToUserText());
+        await run.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
+    public void ProductionMode_WithoutParentProcess_RejectsEveryRequest()
+    {
+        var backend = FakeNetworkAdapterBackend.WithSampleAdapter(out _);
+
+        // 生产入口会设置 RequireParentProcessId；没拿到 --parent 时不得退化成"无校验"
+        using var harness = new Harness(backend, new HelperServerOptions
+        {
+            PipeName = HelperProtocol.CreatePipeName(),
+            RequireParentProcessId = true
+        });
+
+        var response = HelperPipeClient.Send(harness.PipeName, new HelperRequest { Command = HelperCommands.Status });
+
+        Assert.False(response.IsSuccess);
+        Assert.Equal(ErrorCodes.PlatformPermission, response.ErrorCode);
+        Assert.Contains("父进程", response.Message!);
+        Assert.Equal(0, backend.TotalCallCount);              // 拒绝发生在任何后端调用之前
+
+        // 有副作用的命令同样被拦（不是只挡 status）
+        var apply = HelperPipeClient.Send(harness.PipeName, new HelperRequest
+        {
+            Command = HelperCommands.Apply,
+            AdapterId = "adapter-1",
+            Payload = "{}"
+        });
+        Assert.False(apply.IsSuccess);
+        Assert.Equal(ErrorCodes.PlatformPermission, apply.ErrorCode);
+        Assert.Empty(backend.ApplyCalls);
+    }
+
+    [Fact]
+    public void VerifyClientProcessDisabled_SkipsPidCheck()
+    {
+        var backend = FakeNetworkAdapterBackend.WithSampleAdapter(out _);
+
+        // 单元测试兜底路径：显式关闭校验时仍可工作（生产入口不会这么配置）
+        using var harness = new Harness(backend, new HelperServerOptions
+        {
+            PipeName = HelperProtocol.CreatePipeName(),
+            VerifyClientProcess = false,
+            RequireParentProcessId = true
+        });
+
+        var response = HelperPipeClient.Send(harness.PipeName, new HelperRequest { Command = HelperCommands.Status });
+        Assert.True(response.IsSuccess, response.ToUserText());
+    }
+
     /// <summary>测试脚手架：启动一个后台运行的助手服务，Dispose 时取消并等待退出。</summary>
     private sealed class Harness : IDisposable
     {

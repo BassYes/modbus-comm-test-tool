@@ -109,11 +109,22 @@ public sealed class ParameterScanService
         _log = log;
     }
 
+    /// <summary>
+    /// 最近一次扫描结束时的"原串口参数恢复结果"。审计 F-06：
+    /// 正常结束时它同时体现在 <see cref="ParameterScanResult.Restored"/> 里；
+    /// 取消/异常终态不会返回结果对象，界面必须靠本属性判断，不能无条件宣称"已恢复"。
+    /// 尚未执行过扫描时为 null。
+    /// </summary>
+    public SerialRestoreResult? LastRestore { get; private set; }
+
     public async Task<ParameterScanResult> ScanAsync(ParameterScanOptions options, PauseGate? gate,
         IProgress<ScanProgress>? progress, IProgress<DeviceScanItem>? itemProgress, CancellationToken cancellationToken)
     {
-        if (!ParameterScanOptions.Validate(options, out var error)) throw new CommException(error!);
+        // 新一轮扫描：先清掉上一轮的恢复结果，避免任何终态误报（审计 F-06）。放在校验之前，
+        // 保证"调用方再读到的 LastRestore 一定是本次扫描的结果，或者是 null（本次没走到恢复）"。
+        LastRestore = null;
 
+        if (!ParameterScanOptions.Validate(options, out var error)) throw new CommException(error!);
         if (!_reconfigurator.CanReconfigure)
         {
             throw new CommException(new ErrorInfo(ErrorCodes.ValidationParameterScanNotSerial, ErrorCategory.Validation,
@@ -248,6 +259,7 @@ public sealed class ParameterScanService
             var restore = await _reconfigurator.RestoreAsync(CancellationToken.None).ConfigureAwait(false);
             restored = restore.Success;
             restoreError = restore.Error;
+            LastRestore = restore;   // 审计 F-06：取消/异常路径也要能读到恢复结果
             if (!restored)
             {
                 _log?.Invoke($"参数扫描：恢复原串口参数失败 —— {restoreError}");

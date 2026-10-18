@@ -44,12 +44,19 @@ public sealed class SessionManager : IAsyncDisposable, ISerialReconfigurator
         _log = log;
         _ports = ports;
         _settings = settings;
+
+        // 审计 F-04：解析开关与 JSONL 记录是全局状态，集中到一个实例，注入给每个会话的监视投影。
+        MonitorShared = new MonitorSharedState(frameBus, log, settings.Monitor);
+
         _active = CreateSessionInternal($"会话 1");
         _sessions.Add(_active);
     }
 
     /// <summary>按创建顺序排列的全部会话。</summary>
     public IReadOnlyList<SessionContext> Sessions => _sessions;
+
+    /// <summary>跨会话共享的监视状态（解析开关 / 记录）；UI 上标注为"全局"。</summary>
+    public MonitorSharedState MonitorShared { get; }
 
     /// <summary>当前活动会话（界面顶部标签页 / 底栏状态来源）。</summary>
     public SessionContext Active => _active;
@@ -83,7 +90,8 @@ public sealed class SessionManager : IAsyncDisposable, ISerialReconfigurator
     {
         _sessionCounter++;
         var id = Guid.NewGuid().ToString("N")[..8];
-        var session = new SessionContext(id, name, _frameBus, _log, _ports, _settings, OnSessionStateChanged);
+        var session = new SessionContext(id, name, _frameBus, _log, _ports, _settings, OnSessionStateChanged,
+            MonitorShared);
         _ports.RegisterName(id, session.Name);
         return session;
     }

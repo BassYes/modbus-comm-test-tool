@@ -162,9 +162,19 @@ public partial class LanScanViewModel : ObservableObject
         }
 
         var hosts = range.Value!;
-        if (hosts.Count > 1024 && !_app.Dialogs.Confirm("确认扫描范围",
-                $"即将扫描 {hosts.Count} 个地址（{hosts[0]} ~ {hosts[^1]}），并发 {options.EffectiveConcurrency()}。\n\n" +
-                "请确认已获得该网段的扫描授权，且不会影响生产网络。是否继续？"))
+
+        // 审计 F-07：任何范围都要先过授权确认（原来只在 >1024 个地址时才问）。
+        // 现场往往就是 /24 这种"看起来很小"的网段，但同样可能扫到生产设备。
+        var message = $"即将扫描 {hosts.Count} 个地址（{hosts[0]} ~ {hosts[^1]}），并发 {options.EffectiveConcurrency()}。\n\n" +
+                      "扫描会向上述地址发送 ARP / ICMP / TCP 探测" +
+                      (options.IdentifyModbus ? "，并对开放 502 的地址发送 Modbus 只读探测" : string.Empty) + "。\n" +
+                      "请确认已获得该网段的扫描授权，且不会影响生产网络。" +
+                      (hosts.Count > 1024
+                          ? "\n\n提示：该范围较大（>1024 个地址），建议缩小到实际设备所在网段，或降低并发。"
+                          : string.Empty) +
+                      "\n\n是否继续？";
+
+        if (!_app.Dialogs.Confirm("确认扫描范围与授权", message))
         {
             return;
         }

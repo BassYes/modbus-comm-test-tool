@@ -13,16 +13,21 @@
         <Border Grid.Row="0" BorderBrush="{StaticResource BorderBrushLight}" BorderThickness="1" CornerRadius="3"
                 Padding="8" Background="{StaticResource PanelBrush}">
             <WrapPanel>
-                <CheckBox IsChecked="{Binding Monitor.ParseEnabled}" Content="报文解析" />
-                <CheckBox IsChecked="{Binding Monitor.DisplayPaused}" Content="暂停显示（采集与记录继续）" />
+                <CheckBox IsChecked="{Binding Monitor.ParseEnabled}" Content="报文解析（全局）"
+                          ToolTip="解析在采集端完成，是全局开关：关闭后所有会话都不再生成解析摘要，原始报文照常采集与落盘" />
+                <CheckBox IsChecked="{Binding Monitor.DisplayPaused}" Content="暂停本会话显示（采集与记录继续）"
+                          ToolTip="只暂停本窗口的界面投递；其它会话的显示不受影响，落盘与通信也不受影响" />
                 <CheckBox IsChecked="{Binding Monitor.AutoScroll}" Content="自动滚动" />
                 <CheckBox IsChecked="{Binding Monitor.ColorizeDirections}" Content="TX/RX 着色"
                           ToolTip="关闭后仍保留 TX/RX 文字与箭头标记，不单靠颜色区分" />
-                <Button Content="清空显示" Command="{Binding ClearCommand}" />
+                <Button Content="清空本会话显示" Command="{Binding ClearCommand}"
+                        ToolTip="只清空本会话的显示行；其它会话的记录不受影响，已落盘的文件也不受影响" />
                 <Button Content="保存 TXT" Command="{Binding SaveTextCommand}" />
                 <Button Content="保存 CSV" Command="{Binding SaveCsvCommand}" />
-                <Button Content="开始记录" Command="{Binding StartRecordingCommand}" />
-                <Button Content="停止记录" Command="{Binding StopRecordingCommand}" />
+                <Button Content="开始记录（全局）" Command="{Binding StartRecordingCommand}"
+                        ToolTip="报文记录只有一个 JSONL 文件，因此是全局的：开始后所有会话的报文都会写入同一文件" />
+                <Button Content="停止记录（全局）" Command="{Binding StopRecordingCommand}"
+                        ToolTip="停止全局报文记录；对其它会话同样生效" />
                 <Button Content="复制选中报文" Command="{Binding CopySelectedHexCommand}" />
                 <Button Content="报文详情" Command="{Binding SendSelectedToManualCommand}" />
             </WrapPanel>
