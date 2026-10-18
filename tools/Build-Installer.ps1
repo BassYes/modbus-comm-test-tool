@@ -71,10 +71,13 @@ Write-Host "安装包版本：$Version" -ForegroundColor Cyan
 
 # ---------------------------------------------------------------- Inno Setup
 if (-not $InnoCompiler) {
-    $candidates = @(
+    # 注意：管道只命中一个路径时结果是 String，$candidates[0] 会取到首字符 'C'（PS 的字符串索引语义），
+    # 因此必须用 @() 强制成数组，否则"只装了一处 Inno Setup"反而检测不到。
+    $candidates = @(@(
         'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
-        'C:\Program Files\Inno Setup 6\ISCC.exe'
-    ) | Where-Object { Test-Path -LiteralPath $_ }
+        'C:\Program Files\Inno Setup 6\ISCC.exe',
+        (Join-Path $PSScriptRoot '_build\inno\ISCC.exe')
+    ) | Where-Object { Test-Path -LiteralPath $_ })
     if ($candidates.Count -gt 0) { $InnoCompiler = $candidates[0] }
 }
 

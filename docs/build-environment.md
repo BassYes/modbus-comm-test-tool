@@ -121,6 +121,13 @@ artifacts\publish\
 - 产物在 `artifacts\installer\`。安装版把程序装到 `Program Files`、用户数据在 `%APPDATA%\通讯测试工具\`（`AppPaths` 已实现回退）。
 - 安装出来的文件**不带“来自网络”标记**，这是消除启动提示最有效的一条渠道（规划 22.5.2 L2）。
 
+**Inno Setup 相关注意**：
+
+- 默认按顺序自动探测 `C:\Program Files (x86)\Inno Setup 6\ISCC.exe` → `C:\Program Files\Inno Setup 6\ISCC.exe` → `tools\_build\inno\ISCC.exe`（便携版），都不在时回退“便携安装包 zip”。
+- 简体中文语言包**随仓库提供**（`tools\ChineseSimplified.isl`），`installer.iss` 用 `{#SourcePath}\ChineseSimplified.isl` 引用，因此换机器不需要手动往 Inno 目录里拷语言文件。
+- Inno Setup 的安装程序本身在 **系统 TEMP 不可写**时会静默失败（退出码 1、连日志都不写）。如果目标机是受限环境，先把 `TEMP`/`TMP` 指到可写目录再安装 Inno，或用 `/PORTABLE=1 /VERYSILENT /DIR=<可写目录>` 解压出便携版 ISCC。
+- 首次真编译时踩到过两处脚本语法问题，已修：文件头注释必须用 `;`（`#` 是 Inno 预处理指令）、`Excludes` 必须与 `Source` 写在同一条 `[Files]` 条目里。
+
 **不要把 `bin/Debug` 直接拷到现场**：里面有 pdb 与中间文件，且经网络/U 盘搬运后容易带上 MOTW 标记而触发安全警告。
 
 ## 5. 已知环境相关注意事项

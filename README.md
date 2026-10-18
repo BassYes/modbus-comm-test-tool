@@ -260,7 +260,7 @@ powershell -File tools/Invoke-SoakTest.ps1
 
 | 渠道 | 文件 | 说明 |
 |---|---|---|
-| 安装包（L2） | `artifacts/installer/通讯测试工具-0.4.1.0-安装包.exe`（72 MB） | Inno Setup 6.7.3 编译；装到 `{autopf}\通讯测试工具`，带开始菜单/桌面快捷方式与卸载项；程序文件不带 MOTW |
+| 安装包（L2） | `artifacts/installer/通讯测试工具-0.4.1.0-安装包.exe`（72 MB） | Inno Setup 6 编译（语言包随仓库提供）；装到 `{autopf}\通讯测试工具`，带开始菜单/桌面快捷方式与卸载项；程序文件不带 MOTW |
 | 便携包（L3） | `artifacts/CommTestTool-0.4.1.0-win-x64.zip`（99 MB） | 解压即用；含 `便携包说明.txt` 与 `解除锁定-便携包.ps1` |
 
 两个包内均含 `helper\Comm.NetConfigHelper.exe`（提权助手）与 `plugins\` 受信目录。

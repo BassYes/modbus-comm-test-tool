@@ -55,7 +55,10 @@ CloseApplications=yes
 RestartApplications=no
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+; 简体中文语言包随仓库提供（tools\ChineseSimplified.isl）：
+; 部分 Inno 发行版的 Languages\ 目录不带中文，若直接用 compiler:Languages\ 会在换机器时编译失败。
+; 这里优先用随仓库的副本，保证任何 Inno 6.x 上都能出同一种安装包。
+Name: "chinesesimplified"; MessagesFile: "{#SourcePath}\ChineseSimplified.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加任务:"; Flags: unchecked
