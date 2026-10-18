@@ -1,0 +1,152 @@
+<UserControl x:Class="Comm.App.Wpf.Views.ConnectionView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+    <Grid Margin="12" Width="1180" HorizontalAlignment="Left">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="340" />
+            <ColumnDefinition Width="330" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- 串口 -->
+        <Border Grid.Column="0" BorderBrush="{StaticResource BorderBrushLight}" BorderThickness="1" CornerRadius="3"
+                Padding="12" Margin="0,0,12,0" Background="{StaticResource PanelBrush}">
+            <StackPanel>
+                <TextBlock Text="串口连接（Modbus RTU）" Style="{StaticResource SectionHeader}" />
+
+                <TextBlock Text="串口" Style="{StaticResource FieldLabel}" />
+                <ComboBox ItemsSource="{Binding Ports}" SelectedItem="{Binding SelectedPort}" IsEditable="True" />
+
+                <TextBlock Text="波特率" Style="{StaticResource FieldLabel}" />
+                <ComboBox ItemsSource="{Binding BaudRates}" SelectedItem="{Binding BaudRate}" />
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="数据位" Style="{StaticResource FieldLabel}" />
+                        <ComboBox ItemsSource="{Binding DataBitsOptions}" SelectedItem="{Binding DataBits}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="停止位" Style="{StaticResource FieldLabel}" />
+                        <ComboBox ItemsSource="{Binding StopBitsOptions}" DisplayMemberPath="Display"
+                                  SelectedValuePath="Value" SelectedValue="{Binding StopBits}" />
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Text="校验位（串口帧校验，与 RTU 的 CRC 是两回事）" Style="{StaticResource FieldLabel}" />
+                <ComboBox ItemsSource="{Binding ParityOptions}" DisplayMemberPath="Display"
+                          SelectedValuePath="Value" SelectedValue="{Binding Parity}" />
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="响应超时 ms" Style="{StaticResource FieldLabel}" />
+                        <TextBox Text="{Binding ResponseTimeoutMs}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="重试次数" Style="{StaticResource FieldLabel}" />
+                        <TextBox Text="{Binding RetryCount}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="请求间隔 ms" Style="{StaticResource FieldLabel}" />
+                        <TextBox Text="{Binding TurnaroundDelayMs}" />
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Text="RTU 静默判定下限 ms（Windows 计时精度有限，不建议小于 5）" Style="{StaticResource FieldLabel}" />
+                <TextBox Text="{Binding SilenceThresholdMs}" />
+
+                <CheckBox IsChecked="{Binding SuppressEcho}" Content="抑制 RS-485 回显（半双工适配器常见）" />
+
+                <TextBlock Text="{Binding SerialSummary}" Foreground="#4A4A55" Margin="0,4,0,8" TextWrapping="Wrap" />
+
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="刷新串口" Command="{Binding RefreshPortsCommand}"
+                            IsEnabled="{Binding CanRefreshPorts}" />
+                    <Button Content="打开串口" Command="{Binding ConnectSerialCommand}" FontWeight="SemiBold"
+                            IsEnabled="{Binding IsSerialParametersEnabled}" />
+                    <Button Content="关闭串口" Command="{Binding CloseSerialCommand}" FontWeight="SemiBold"
+                            IsEnabled="{Binding IsSerialConnected}" />
+                </StackPanel>
+                <TextBlock Text="串口连接后参数会被锁定；如需修改请先关闭串口。（同一条串口只能被一个会话占用）"
+                           TextWrapping="Wrap" Foreground="#4A4A55" Margin="0,6,0,0" />
+            </StackPanel>
+        </Border>
+
+        <!-- TCP -->
+        <Border Grid.Column="1" BorderBrush="{StaticResource BorderBrushLight}" BorderThickness="1" CornerRadius="3"
+                Padding="12" Margin="0,0,12,0" Background="{StaticResource PanelBrush}">
+            <StackPanel>
+                <TextBlock Text="Modbus TCP 连接" Style="{StaticResource SectionHeader}" />
+
+                <TextBlock Text="目标 IP" Style="{StaticResource FieldLabel}" />
+                <TextBox Text="{Binding Host}" />
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="端口" Style="{StaticResource FieldLabel}" />
+                        <TextBox Text="{Binding Port}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Unit ID" Style="{StaticResource FieldLabel}" />
+                        <TextBox Text="{Binding UnitId}" />
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Text="连接超时 ms" Style="{StaticResource FieldLabel}" />
+                <TextBox Text="{Binding ConnectTimeoutMs}" />
+
+                <TextBlock Text="{Binding TcpSummary}" Foreground="#4A4A55" Margin="0,4,0,8" TextWrapping="Wrap" />
+
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="连接 TCP" Command="{Binding ConnectTcpCommand}" FontWeight="SemiBold" />
+                    <Button Content="断开" Command="{Binding DisconnectCommand}"
+                            IsEnabled="{Binding IsTcpConnected}" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- 状态 -->
+        <Border Grid.Column="2" BorderBrush="{StaticResource BorderBrushLight}" BorderThickness="1" CornerRadius="3"
+                Padding="12" Background="White">
+            <StackPanel>
+                <TextBlock Text="当前会话" Style="{StaticResource SectionHeader}" />
+                <TextBlock Text="{Binding StatusText}" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding ConnectionParamsText}" TextWrapping="Wrap" Foreground="#1B5E9B" Margin="0,4,0,0" />
+                <TextBlock Text="{Binding StatisticsText}" Margin="0,10,0,0" TextWrapping="Wrap" />
+                <Button Content="清零统计" Command="{Binding ResetStatisticsCommand}" HorizontalAlignment="Left" Margin="0,12,0,0" />
+
+                <TextBlock Text="常用设备目标" Style="{StaticResource SectionHeader}" />
+                <ComboBox ItemsSource="{Binding Targets}" DisplayMemberPath="DisplayText"
+                          SelectedItem="{Binding SelectedTarget}" />
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="载入" Command="{Binding ApplyTargetCommand}" />
+                    <Button Content="删除" Command="{Binding RemoveTargetCommand}" />
+                </StackPanel>
+                <TextBox Text="{Binding TargetName}" ToolTip="设备目标名称（可空）" />
+                <Button Content="把当前端点保存为目标" Command="{Binding SaveTargetCommand}" HorizontalAlignment="Left" />
+
+                <TextBlock Text="现场提示" Style="{StaticResource SectionHeader}" />
+                <TextBlock TextWrapping="Wrap" Foreground="#4A4A55" Text="1. 请仅连接与扫描已获授权的设备与网络。&#10;2. 默认只使用读功能码；写操作需要二次确认。&#10;3. 同一条串口只能被一个会话占用；多个 TCP 会话可以连接不同设备。&#10;4. USB 串口被拔出时程序会提示并保留已有数据，不会崩溃。" />
+
+                <TextBlock Text="消息" Style="{StaticResource SectionHeader}" />
+                <Border Background="#FFF8E1" Padding="8" CornerRadius="3">
+                    <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+                </Border>
+            </StackPanel>
+        </Border>
+    </Grid>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>Comm.App.Wpf</RootNamespace>
+    <AssemblyName>CommTestTool</AssemblyName>
+    <ApplicationIcon />
+    <StartupObject>Comm.App.Wpf.App</StartupObject>
+    <!-- 显式 asInvoker 清单：不触发 UAC，也不被“安装程序检测”误判 -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyTitle>通讯测试工具</AssemblyTitle>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Comm.Core\Comm.Core.csproj" />
+    <ProjectReference Include="..\Comm.Capture\Comm.Capture.csproj" />
+    <ProjectReference Include="..\Comm.Diagnostics\Comm.Diagnostics.csproj" />
+    <ProjectReference Include="..\Comm.Network\Comm.Network.csproj" />
+    <ProjectReference Include="..\Comm.Plugins.Abstractions\Comm.Plugins.Abstractions.csproj" />
+    <ProjectReference Include="..\Comm.Protocols.Modbus\Comm.Protocols.Modbus.csproj" />
+    <ProjectReference Include="..\Comm.Scanning\Comm.Scanning.csproj" />
+    <ProjectReference Include="..\Comm.Session\Comm.Session.csproj" />
+    <ProjectReference Include="..\Comm.Settings\Comm.Settings.csproj" />
+    <ProjectReference Include="..\Comm.Transport\Comm.Transport.csproj" />
+  </ItemGroup>
+</Project>

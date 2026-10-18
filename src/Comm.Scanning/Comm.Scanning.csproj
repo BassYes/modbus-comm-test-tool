@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Comm.Scanning</RootNamespace>
+    <AssemblyName>Comm.Scanning</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Comm.Core\Comm.Core.csproj" />
+    <ProjectReference Include="..\Comm.Protocols.Modbus\Comm.Protocols.Modbus.csproj" />
+    <ProjectReference Include="..\Comm.Session\Comm.Session.csproj" />
+  </ItemGroup>
+</Project>

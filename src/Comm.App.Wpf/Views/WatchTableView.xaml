@@ -1,0 +1,155 @@
+<UserControl x:Class="Comm.App.Wpf.Views.WatchTableView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Margin="12">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="340" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- 点位管理 -->
+        <Border Grid.Column="0" BorderBrush="{StaticResource BorderBrushLight}" BorderThickness="1" CornerRadius="3"
+                Padding="12" Margin="0,0,12,0" Background="{StaticResource PanelBrush}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Text="新增点位" Style="{StaticResource SectionHeader}" />
+
+                    <TextBlock Text="点位名称" Style="{StaticResource FieldLabel}" />
+                    <TextBox Text="{Binding NewPointName}" />
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="从站地址" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding UnitId}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="协议地址" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding Address}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock Text="数据区" Style="{StaticResource FieldLabel}" />
+                    <ComboBox ItemsSource="{Binding AreaOptions}" DisplayMemberPath="Display"
+                              SelectedValuePath="Value" SelectedValue="{Binding Area}" />
+
+                    <TextBlock Text="数据类型" Style="{StaticResource FieldLabel}" />
+                    <ComboBox ItemsSource="{Binding TypeOptions}" DisplayMemberPath="Display"
+                              SelectedValuePath="Value" SelectedValue="{Binding DataType}" />
+
+                    <TextBlock Text="字节序" Style="{StaticResource FieldLabel}" />
+                    <ComboBox ItemsSource="{Binding OrderOptions}" DisplayMemberPath="Display"
+                              SelectedValuePath="Value" SelectedValue="{Binding ByteOrder}" />
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="缩放" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding Scale}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="偏移" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding Offset}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="单位" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding Unit}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock Text="备注" Style="{StaticResource FieldLabel}" />
+                    <TextBox Text="{Binding Note}" />
+
+                    <Button Content="加入监视表" Command="{Binding AddPointCommand}" FontWeight="SemiBold"
+                            HorizontalAlignment="Left" />
+
+                    <TextBlock Text="周期刷新" Style="{StaticResource SectionHeader}" />
+                    <TextBlock Text="刷新周期 ms" Style="{StaticResource FieldLabel}" />
+                    <TextBox Text="{Binding IntervalMs}" />
+                    <TextBlock Text="{Binding IntervalHint}" TextWrapping="Wrap" Foreground="#4A4A55" Margin="0,0,0,8" />
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <Button Content="开始" Command="{Binding StartCommand}" FontWeight="SemiBold" />
+                        <Button Content="暂停/继续" Command="{Binding PauseResumeCommand}" />
+                        <Button Content="停止" Command="{Binding StopCommand}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="立即读取一次" Command="{Binding RefreshOnceCommand}" />
+                        <Button Content="导出 CSV" Command="{Binding ExportCommand}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                        <Button Content="点位详情" Command="{Binding ShowPointDetailCommand}" />
+                        <Button Content="移除点位" Command="{Binding RemovePointCommand}" />
+                        <Button Content="清空监视表" Command="{Binding ClearPointsCommand}" />
+                    </StackPanel>
+
+                    <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="#1B5E9B" Margin="0,10,0,0" />
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="180" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
+                <TextBlock Text="{Binding PointsSummary}" FontWeight="SemiBold" Margin="0,0,12,0" />
+                <TextBlock Text="（变化列标出与上一轮不同的点位；周期请求优先级低于手动发送、高于扫描）"
+                           Foreground="#4A4A55" />
+            </StackPanel>
+
+            <DataGrid Grid.Row="1" ItemsSource="{Binding Watch.Points}" SelectedItem="{Binding SelectedPoint}">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="名称" Binding="{Binding Name}" Width="160" />
+                    <DataGridTextColumn Header="数据区" Binding="{Binding Area}" Width="110" />
+                    <DataGridTextColumn Header="协议地址" Binding="{Binding Address}" Width="80" />
+                    <DataGridTextColumn Header="类型" Binding="{Binding Type}" Width="100" />
+                    <DataGridTextColumn Header="字节序" Binding="{Binding Order}" Width="70" />
+                    <DataGridTextColumn Header="缩放" Binding="{Binding Scale}" Width="60" />
+                    <DataGridTextColumn Header="单位" Binding="{Binding Unit}" Width="70" />
+                    <DataGridTextColumn Header="备注" Binding="{Binding Note}" Width="*" />
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,6">
+                <TextBlock Text="采样记录（新记录在前）" Style="{StaticResource SectionHeader}" Margin="0,0,10,0" />
+                <Button Content="清空记录" Command="{Binding ClearSamplesCommand}" />
+            </StackPanel>
+
+            <DataGrid Grid.Row="3" ItemsSource="{Binding Watch.Samples}" SelectedItem="{Binding SelectedSample}">
+                <DataGrid.RowStyle>
+                    <Style TargetType="DataGridRow">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Changed}" Value="True">
+                                <Setter Property="Background" Value="#FFF3E0" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </DataGrid.RowStyle>
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="时间" Binding="{Binding Timestamp, StringFormat=HH:mm:ss.fff}" Width="100" />
+                    <DataGridTextColumn Header="点位" Binding="{Binding Name}" Width="160" />
+                    <DataGridTextColumn Header="地址" Binding="{Binding AddressText}" Width="130" />
+                    <DataGridTextColumn Header="解析值" Binding="{Binding DisplayText}" Width="140" />
+                    <DataGridTextColumn Header="原始寄存器" Binding="{Binding RawHex}" Width="180" FontFamily="Consolas" />
+                    <DataGridTextColumn Header="状态" Binding="{Binding StatusText}" Width="80" />
+                    <DataGridTextColumn Header="变化" Binding="{Binding ChangedText}" Width="70" />
+                    <DataGridTextColumn Header="上次值" Binding="{Binding PreviousValue}" Width="110" />
+                    <DataGridTextColumn Header="耗时ms" Binding="{Binding ElapsedMs, StringFormat=F1}" Width="80" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </Grid>
+    </Grid>
+</UserControl>

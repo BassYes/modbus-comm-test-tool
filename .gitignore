@@ -1,0 +1,46 @@
+## 构建产物
+bin/
+obj/
+artifacts/
+*.user
+*.suo
+.vs/
+.vscode/
+.idea/
+TestResults/
+
+## 运行时数据（程序同级目录与用户数据目录）
+src/Comm.App.Wpf/bin/**/data/
+src/Comm.App.Wpf/bin/**/logs/
+logs/
+data/
+exports/
+captures/
+*.running
+
+## 诊断与临时文件
+crash-*.log
+*.log
+*.tmp
+*.bad-*
+
+## 密钥、令牌与本机私有配置（禁止入库，见规划 21.6.1）
+# 签名私钥与容器：泄露即可冒名签名
+*.pfx
+*.p12
+*.snk
+*.key
+*.pem
+*.pvk
+# 环境与凭据文件
+.env
+.env.*
+secrets/
+*.secret
+*.token
+# 仅本机使用的覆盖配置
+*.local.json
+*.local.md
+
+## 界面截图（随仓库分发，如不需要可取消下面的注释）
+# docs/screenshot-*.png

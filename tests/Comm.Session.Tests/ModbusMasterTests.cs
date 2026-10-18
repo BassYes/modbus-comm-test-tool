@@ -1,0 +1,275 @@
+using Comm.Core.Codecs;
+using Comm.Core.Frames;
+using Comm.Protocols.Modbus;
+using Comm.Session;
+using Comm.TestSupport;
+using Comm.Transport;
+using Xunit;
+
+namespace Comm.Session.Tests;
+
+/// <summary>事务层：请求/响应匹配、重试、异常响应、写守卫、回显抑制（见规划 16.3.3、16.3.4）。</summary>
+public class ModbusMasterTests
+{
+    private static (ModbusSession Session, ModbusSlaveSimulator Slave, CollectingFrameObserver Observer) CreateRtu(
+        SessionOptions? options = null, ModbusSlaveSimulator? slave = null)
+    {
+        slave ??= new ModbusSlaveSimulator();
+        var codec = new ModbusRtuCodec();
+        var observer = new CollectingFrameObserver();
+        var channel = new LoopbackChannel(slave.CreateResponder(codec), responseDelayMs: 1);
+        var sessionOptions = options ?? new SessionOptions
+        {
+            ResponseTimeoutMs = 300,
+            RetryCount = 0,
+            TurnaroundDelayMs = 1,
+            IsSerial = true,
+            SuppressEcho = true
+        };
+
+        var session = new ModbusSession(channel, codec, sessionOptions, observer);
+        return (session, slave, observer);
+    }
+
+    [Fact]
+    public async Task Reads_holding_registers_successfully()
+    {
+        var (session, slave, observer) = CreateRtu();
+        slave.HoldingRegisters[0] = 0x000A;
+        slave.HoldingRegisters[1] = 0x0014;
+
+        await session.ConnectAsync();
+        var result = await session.ReadAsync(1, DataArea.HoldingRegisters, 0, 2);
+
+        Assert.Equal(ExchangeStatus.Ok, result.Status);
+        Assert.Equal(new ushort[] { 10, 20 }, result.ResponsePdu!.Registers);
+        Assert.Equal(1, result.Attempts);
+        Assert.True(result.Elapsed.TotalMilliseconds >= 0);
+        Assert.Equal(1, session.Statistics.TxCount);
+        Assert.Equal(1, session.Statistics.RxCount);
+
+        // 报文旁路：TX 与 RX 都被记录，且 RX 带响应耗时
+        Assert.Equal(1, observer.Count(FrameDirection.Tx));
+        Assert.Equal(1, observer.Count(FrameDirection.Rx));
+        Assert.NotNull(observer.Records.First(r => r.Direction == FrameDirection.Rx).ElapsedMs);
+
+        await session.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Wrong_slave_address_times_out_and_is_not_matched()
+    {
+        var (session, _, observer) = CreateRtu();
+        await session.ConnectAsync();
+
+        var result = await session.ReadAsync(9, DataArea.HoldingRegisters, 0, 1);
+
+        Assert.Equal(ExchangeStatus.Timeout, result.Status);
+        Assert.Equal(1, session.Statistics.TimeoutCount);
+        Assert.DoesNotContain(observer.Records, r => r.Direction == FrameDirection.Rx);
+
+        await session.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Retries_until_configured_attempts_and_counts_timeouts()
+    {
+        var (session, slave, _) = CreateRtu(new SessionOptions
+        {
+            ResponseTimeoutMs = 80,
+            RetryCount = 2,
+            TurnaroundDelayMs = 1,
+            IsSerial = true,
+            SuppressEcho = false
+        });
+        slave.Offline = true;
+
+        await session.ConnectAsync();
+        var result = await session.ReadAsync(1, DataArea.HoldingRegisters, 0, 1);
+
+        Assert.Equal(ExchangeStatus.Timeout, result.Status);
+        Assert.Equal(3, result.Attempts);
+        Assert.Equal(2, session.Statistics.RetryCount);
+        Assert.Equal(3, session.Statistics.TxCount);
+
+        await session.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Modbus_exception_response_is_a_value_not_an_error()
+    {
+        var (session, slave, _) = CreateRtu();
+        slave.IllegalAddresses.Add(5);
+
+        await session.ConnectAsync();
+        var result = await session.ReadAsync(1, DataArea.HoldingRegisters, 5, 1);
+
+        Assert.Equal(ExchangeStatus.ModbusException, result.Status);
+        Assert.Equal((byte)0x02, result.ExceptionCode);
+        Assert.Equal(1, result.Attempts); // 异常响应不重试
+        Assert.Equal(1, session.Statistics.ExceptionCount);
+
+        await session.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Checksum_error_is_reported_and_retriable()
+    {
+        var (session, slave, observer) = CreateRtu(new SessionOptions
+        {
+            ResponseTimeoutMs = 120,
+            RetryCount = 1,
+            TurnaroundDelayMs = 1,
+            IsSerial = true,
+            SuppressEcho = false
+        });
+        slave.CorruptChecksum = true;
+
+        await session.ConnectAsync();
+        var result = await session.ReadAsync(1, DataArea.HoldingRegisters, 0, 1);
+
+        Assert.Equal(ExchangeStatus.ChecksumError, result.Status);
+        Assert.Equal(2, result.Attempts);
+        Assert.Contains(observer.Records, r => r.Status == FrameStatus.ChecksumError);
+
+        await session.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Unconfirmed_write_is_rejected_by_the_guard()
+    {
+        var (session, slave, observer) = CreateRtu();
+        await session.ConnectAsync();
+
+        var request = new ModbusRequest(1, ModbusRequests.WriteSingleRegister(0, 0x1234));
+        var result = await session.ExecuteAsync(request);
+
+        Assert.Equal(ExchangeStatus.Rejected, result.Status);
+        Assert.Equal("VAL-4004", result.Error!.Code);
+        Assert.DoesNotContain(observer.Records, r => r.Direction == FrameDirection.Tx);
+        Assert.Empty(slave.ReceivedRequests);
+        Assert.Equal(1, session.Statistics.RejectedCount);
+
+        await session.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Broadcast_write_requires_explicit_broadcast_confirmation()
+    {
+        var (session, slave, _) = CreateRtu();
+        await session.ConnectAsync();
+
+        var refused = await session.ExecuteAsync(new ModbusRequest(0, ModbusRequests.WriteSingleRegister(0, 1), Confirmed: true));
+        Assert.Equal(ExchangeStatus.Rejected, refused.Status);
+        Assert.Equal("VAL-4005", refused.Error!.Code);
+
+        var accepted = await session.ExecuteAsync(new ModbusRequest(0, ModbusRequests.WriteSingleRegister(0, 1),
+            Confirmed: true, BroadcastConfirmed: true));
+        Assert.Equal(ExchangeStatus.Ok, accepted.Status);
+        Assert.Equal((ushort)1, slave.HoldingRegisters[0]);
+        Assert.Null(accepted.Response);
+
+        await session.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Confirmed_write_updates_slave_register()
+    {
+        var (session, slave, _) = CreateRtu();
+        await session.ConnectAsync();
+
+        var result = await session.ExecuteAsync(new ModbusRequest(1, ModbusRequests.WriteSingleRegister(7, 0xBEEF),
+            Confirmed: true));
+
+        Assert.Equal(ExchangeStatus.Ok, result.Status);
+        Assert.Equal((ushort)0xBEEF, slave.HoldingRegisters[7]);
+
+        await session.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Rs485_echo_is_suppressed_and_does_not_break_the_exchange()
+    {
+        var (session, slave, observer) = CreateRtu(slave: new ModbusSlaveSimulator { EchoRequest = true });
+        slave.HoldingRegisters[0] = 0x0102;
+
+        await session.ConnectAsync();
+        var result = await session.ReadAsync(1, DataArea.HoldingRegisters, 0, 1);
+
+        Assert.Equal(ExchangeStatus.Ok, result.Status);
+        Assert.Equal(new ushort[] { 0x0102 }, result.ResponsePdu!.Registers);
+        Assert.Contains(observer.Records, r => r.Markers.HasFlag(FrameMarker.Echo));
+        Assert.Equal(1, session.Statistics.EchoCount);
+
+        await session.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Cancelling_a_request_returns_cancelled_status()
+    {
+        var (session, slave, _) = CreateRtu(new SessionOptions
+        {
+            ResponseTimeoutMs = 5000,
+            RetryCount = 0,
+            TurnaroundDelayMs = 1,
+            IsSerial = true,
+            SuppressEcho = false
+        });
+        slave.Offline = true;
+
+        await session.ConnectAsync();
+        using var cts = new CancellationTokenSource(60);
+        var result = await session.ReadAsync(1, DataArea.HoldingRegisters, 0, 1, cancellationToken: cts.Token);
+
+        Assert.Equal(ExchangeStatus.Cancelled, result.Status);
+
+        await session.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Requests_are_serialized_on_one_link()
+    {
+        var slave = new ModbusSlaveSimulator { ResponseDelayMs = 25 };
+        var (session, _, _) = CreateRtu(slave: slave);
+        await session.ConnectAsync();
+
+        for (int i = 0; i < 4; i++) slave.HoldingRegisters[(ushort)i] = (ushort)(i + 1);
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 4)
+            .Select(i => session.ReadAsync(1, DataArea.HoldingRegisters, (ushort)i, 1)));
+
+        Assert.All(results, r => Assert.Equal(ExchangeStatus.Ok, r.Status));
+        Assert.Equal(4, session.Statistics.TxCount);
+
+        await session.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Tcp_session_matches_by_transaction_id()
+    {
+        var slave = new ModbusSlaveSimulator { UnitId = 0x11 };
+        var codec = new ModbusTcpCodec();
+        var observer = new CollectingFrameObserver();
+        var channel = new LoopbackChannel(slave.CreateResponder(codec), responseDelayMs: 1);
+        slave.HoldingRegisters[3] = 0x4321;
+
+        var options = new SessionOptions
+        {
+            ResponseTimeoutMs = 300,
+            RetryCount = 0,
+            TurnaroundDelayMs = 1,
+            IsSerial = false,
+            SuppressEcho = false
+        };
+        var session = new ModbusSession(channel, codec, options, observer);
+
+        await session.ConnectAsync();
+        var result = await session.ReadAsync(0x11, DataArea.HoldingRegisters, 3, 1);
+
+        Assert.Equal(ExchangeStatus.Ok, result.Status);
+        Assert.Equal(new ushort[] { 0x4321 }, result.ResponsePdu!.Registers);
+        Assert.Contains("modbus-tcp", session.Codec.Name);
+
+        await session.DisposeAsync();
+    }
+}

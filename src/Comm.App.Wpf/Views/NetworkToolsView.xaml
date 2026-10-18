@@ -1,0 +1,133 @@
+<UserControl x:Class="Comm.App.Wpf.Views.NetworkToolsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Margin="12">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="380" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0" BorderBrush="{StaticResource BorderBrushLight}" BorderThickness="1" CornerRadius="3"
+                Padding="12" Margin="0,0,12,0" Background="{StaticResource PanelBrush}">
+            <StackPanel>
+                <TextBlock Text="IPv4 子网计算" Style="{StaticResource SectionHeader}" />
+
+                <TextBlock Text="IP 地址" Style="{StaticResource FieldLabel}" />
+                <TextBox Text="{Binding IpText}" />
+
+                <TextBlock Text="子网掩码或前缀（如 255.255.255.0 或 24 或 /24）" Style="{StaticResource FieldLabel}" />
+                <TextBox Text="{Binding MaskText}" />
+
+                <TextBlock Text="第二个 IP（判断是否同网段，可空）" Style="{StaticResource FieldLabel}" />
+                <TextBox Text="{Binding SecondIpText}" />
+
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="计算" Command="{Binding ComputeCommand}" FontWeight="SemiBold" />
+                    <Button Content="用本机地址" Command="{Binding UseLocalRangeCommand}" />
+                    <Button Content="复制 CIDR" Command="{Binding CopyCidrCommand}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                    <Button Content="复制主机范围" Command="{Binding CopyHostRangeCommand}" />
+                    <Button Content="复制全部结果" Command="{Binding CopyDetailsCommand}" />
+                </StackPanel>
+
+                <TextBlock Text="结果" Style="{StaticResource SectionHeader}" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="110" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="CIDR" />
+                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding CidrText}" FontWeight="SemiBold" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="网络地址" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding NetworkText}" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="广播地址" />
+                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding BroadcastText}" />
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="可用主机范围" />
+                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding HostRangeText}" />
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="通配符掩码" />
+                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding WildcardText}" />
+                    <TextBlock Grid.Row="5" Grid.Column="0" Text="地址数量" />
+                    <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding TotalText}" TextWrapping="Wrap" />
+                    <TextBlock Grid.Row="6" Grid.Column="0" Text="地址类型" />
+                    <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding KindText}" />
+                    <TextBlock Grid.Row="7" Grid.Column="0" Text="IP 二进制" />
+                    <!-- 反馈问题 1：二进制串较长，改用只读 TextBox 自动换行 + 提示，避免在窄窗口下被截断 -->
+                    <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding BinaryText}" IsReadOnly="True"
+                             FontFamily="Consolas" FontSize="12" TextWrapping="Wrap"
+                             HorizontalScrollBarVisibility="Auto" ToolTip="{Binding BinaryText}"
+                             BorderThickness="0" Background="Transparent" Padding="0" Margin="0,0,0,2" />
+                    <TextBlock Grid.Row="8" Grid.Column="0" Text="掩码二进制" />
+                    <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding MaskBinaryText}" IsReadOnly="True"
+                             FontFamily="Consolas" FontSize="12" TextWrapping="Wrap"
+                             HorizontalScrollBarVisibility="Auto" ToolTip="{Binding MaskBinaryText}"
+                             BorderThickness="0" Background="Transparent" Padding="0" Margin="0,0,0,2" />
+                    <TextBlock Grid.Row="9" Grid.Column="0" Text="同网段判断" />
+                    <TextBlock Grid.Row="9" Grid.Column="1" Text="{Binding SameSubnetText}" TextWrapping="Wrap" />
+                    <TextBlock Grid.Row="10" Grid.Column="0" Text="扫描预计耗时" />
+                    <TextBlock Grid.Row="10" Grid.Column="1" Text="{Binding EstimatedScanText}" />
+                </Grid>
+
+                <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="#1B5E9B" Margin="0,10,0,0" />
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="160" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Grid.Row="0" Orientation="Horizontal">
+                <TextBlock Text="本机网络接口（只读）" Style="{StaticResource SectionHeader}" />
+                <Button Content="刷新" Command="{Binding RefreshAdaptersCommand}" />
+                <Button Content="用选中接口地址计算" Command="{Binding UseAdapterAddressCommand}" />
+            </StackPanel>
+
+            <DataGrid Grid.Row="1" ItemsSource="{Binding Adapters}" SelectedItem="{Binding SelectedAdapter}">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="接口" Binding="{Binding Name}" Width="150" />
+                    <DataGridTextColumn Header="描述" Binding="{Binding Description}" Width="240" />
+                    <DataGridTextColumn Header="状态" Binding="{Binding Status}" Width="90" />
+                    <DataGridTextColumn Header="IPv4" Binding="{Binding PrimaryIpv4}" Width="120" />
+                    <DataGridTextColumn Header="掩码" Binding="{Binding PrimaryMask}" Width="120" />
+                    <DataGridTextColumn Header="网关" Binding="{Binding PrimaryGateway}" Width="120" />
+                    <DataGridTextColumn Header="MAC" Binding="{Binding MacAddress}" Width="140" />
+                    <DataGridTextColumn Header="速率" Binding="{Binding SpeedText}" Width="80" />
+                    <DataGridTextColumn Header="DNS" Binding="{Binding DnsServers}" Width="*" />
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <Border Grid.Row="2" BorderBrush="{StaticResource BorderBrushLight}" BorderThickness="1" CornerRadius="3"
+                    Background="White" Padding="8" Margin="0,8,0,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Orientation="Horizontal">
+                        <TextBlock Text="主机地址列表（超过上限时不展开）" Style="{StaticResource SectionHeader}" Margin="0,0,10,0" />
+                        <Button Content="复制列表" Command="{Binding CopyHostListCommand}" />
+                    </StackPanel>
+                    <TextBox Grid.Row="1" Text="{Binding HostListText}" IsReadOnly="True" FontFamily="Consolas"
+                             FontSize="12" VerticalScrollBarVisibility="Auto" AcceptsReturn="True" TextWrapping="NoWrap" />
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

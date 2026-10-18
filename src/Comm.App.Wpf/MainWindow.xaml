@@ -1,0 +1,123 @@
+<Window x:Class="Comm.App.Wpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:Comm.App.Wpf.ViewModels"
+        xmlns:views="clr-namespace:Comm.App.Wpf.Views"
+        Title="通讯测试工具 v0.1 — Modbus RTU / TCP 现场测试"
+        Height="780" Width="1180" MinWidth="1020" MinHeight="640"
+        WindowStartupLocation="CenterScreen" WindowState="Maximized"
+        FontFamily="Microsoft YaHei UI" FontSize="13">
+
+    <Window.Resources>
+        <DataTemplate DataType="{x:Type vm:ConnectionViewModel}">
+            <views:ConnectionView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:DeviceScanViewModel}">
+            <views:DeviceScanView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:DataScanViewModel}">
+            <views:DataScanView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:RegisterLocatorViewModel}">
+            <views:RegisterLocatorView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:WatchTableViewModel}">
+            <views:WatchTableView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:ManualSendViewModel}">
+            <views:ManualSendView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:MonitorViewModel}">
+            <views:MonitorView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:NetworkToolsViewModel}">
+            <views:NetworkToolsView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:LanScanViewModel}">
+            <views:LanScanView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
+            <views:SettingsView />
+        </DataTemplate>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- 顶部：全局工具栏与日志开关 -->
+        <Border DockPanel.Dock="Top" Background="#2B3A4A" Padding="10,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="通讯测试工具" Foreground="White"
+                           FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Margin="12,0,0,0" Foreground="#B8C7D9"
+                           Text="Modbus RTU / Modbus TCP 现场调试" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" Text="{Binding LogText}" Foreground="#FFD9A0" VerticalAlignment="Center"
+                           HorizontalAlignment="Right" Margin="12,0,12,0" TextTrimming="CharacterEllipsis" />
+                <StackPanel Grid.Column="3" Orientation="Horizontal">
+                    <TextBlock Text="Debug 日志" Foreground="#E8EEF5" VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <CheckBox IsChecked="{Binding LogEnabled}" Foreground="White" VerticalAlignment="Center"
+                              ToolTip="打开后会在程序同级目录生成日志文件（可在设置页修改目录与滚动策略）" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 底部：全局状态栏 -->
+        <Border DockPanel.Dock="Bottom" Background="#F0F2F5" BorderBrush="#D6D6DC" BorderThickness="0,1,0,0" Padding="10,4">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{Binding ConnectionText}" Margin="0,0,16,0" FontWeight="SemiBold" />
+                    <TextBlock Grid.Column="1" Text="{Binding StatisticsText}" Margin="0,0,16,0" />
+                    <TextBlock Grid.Column="2" Text="{Binding MonitorText}" TextTrimming="CharacterEllipsis" />
+                    <StackPanel Grid.Column="3" Orientation="Horizontal">
+                        <TextBlock Text="{Binding TaskText}" Margin="0,0,8,0" />
+                        <ProgressBar Width="120" Height="12" Minimum="0" Maximum="100" Value="{Binding TaskPercent}"
+                                     VerticalAlignment="Center" />
+                    </StackPanel>
+                </Grid>
+                <!-- 已连接参数（R-18：显示的是连接成功时的不可变快照）与跨页面通知 -->
+                <Grid Grid.Row="1" Margin="0,2,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{Binding ConnectionParamsText}" Foreground="#1B5E9B"
+                               Margin="0,0,16,0" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="1" Text="{Binding MessageText}" Foreground="#4A4A55"
+                               TextTrimming="CharacterEllipsis" />
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- 左侧导航 -->
+        <Border DockPanel.Dock="Left" Width="150" Background="#F7F7F9" BorderBrush="#D6D6DC" BorderThickness="0,0,1,0">
+            <ListBox ItemsSource="{Binding NavItems}" SelectedItem="{Binding SelectedNav}" BorderThickness="0"
+                     Background="Transparent" Padding="6">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal" Margin="2,4">
+                            <TextBlock Text="{Binding Glyph}" Width="20" FontSize="14" />
+                            <TextBlock Text="{Binding Title}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+
+        <!-- 主工作区 -->
+        <ContentControl Content="{Binding CurrentPage}" Margin="0" />
+    </DockPanel>
+</Window>

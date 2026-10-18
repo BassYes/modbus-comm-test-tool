@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Comm.TestRunner</RootNamespace>
+    <AssemblyName>Comm.TestRunner</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+    <!-- 本机验证用运行器：VSTest 的 testhost 在受限环境下会被拒绝访问父进程句柄，
+         因此提供一个不依赖 VSTest 的轻量运行器，便于在任意环境验证同一批 xunit 用例。 -->
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Comm.Core\Comm.Core.csproj" />
+    <ProjectReference Include="..\Comm.Protocols.Modbus.Tests\Comm.Protocols.Modbus.Tests.csproj" />
+    <ProjectReference Include="..\Comm.Session.Tests\Comm.Session.Tests.csproj" />
+    <ProjectReference Include="..\Comm.Scanning.Tests\Comm.Scanning.Tests.csproj" />
+    <ProjectReference Include="..\Comm.Network.Tests\Comm.Network.Tests.csproj" />
+    <ProjectReference Include="..\Comm.Infrastructure.Tests\Comm.Infrastructure.Tests.csproj" />
+  </ItemGroup>
+</Project>

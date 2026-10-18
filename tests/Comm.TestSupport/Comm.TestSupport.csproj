@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Comm.TestSupport</RootNamespace>
+    <AssemblyName>Comm.TestSupport</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Comm.Core\Comm.Core.csproj" />
+    <ProjectReference Include="..\..\src\Comm.Protocols.Modbus\Comm.Protocols.Modbus.csproj" />
+    <ProjectReference Include="..\..\src\Comm.Transport\Comm.Transport.csproj" />
+  </ItemGroup>
+</Project>

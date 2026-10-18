@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Comm.Capture</RootNamespace>
+    <AssemblyName>Comm.Capture</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Comm.Core\Comm.Core.csproj" />
+  </ItemGroup>
+</Project>

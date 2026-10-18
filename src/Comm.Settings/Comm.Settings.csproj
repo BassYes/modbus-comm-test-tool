@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Comm.Settings</RootNamespace>
+    <AssemblyName>Comm.Settings</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Comm.Core\Comm.Core.csproj" />
+    <ProjectReference Include="..\Comm.Diagnostics\Comm.Diagnostics.csproj" />
+    <ProjectReference Include="..\Comm.Protocols.Modbus\Comm.Protocols.Modbus.csproj" />
+    <ProjectReference Include="..\Comm.Scanning\Comm.Scanning.csproj" />
+    <ProjectReference Include="..\Comm.Core\Comm.Core.csproj" />
+  </ItemGroup>
+</Project>

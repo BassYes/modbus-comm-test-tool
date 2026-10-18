@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Comm.Session</RootNamespace>
+    <AssemblyName>Comm.Session</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Comm.Core\Comm.Core.csproj" />
+    <ProjectReference Include="..\Comm.Protocols.Modbus\Comm.Protocols.Modbus.csproj" />
+  </ItemGroup>
+</Project>

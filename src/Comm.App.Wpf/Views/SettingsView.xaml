@@ -1,0 +1,161 @@
+<UserControl x:Class="Comm.App.Wpf.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Margin="12">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="430" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0" BorderBrush="{StaticResource BorderBrushLight}" BorderThickness="1" CornerRadius="3"
+                Padding="12" Margin="0,0,12,0" Background="{StaticResource PanelBrush}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Text="Debug 日志" Style="{StaticResource SectionHeader}" />
+                    <CheckBox IsChecked="{Binding LogEnabled}"
+                              Content="启用日志（打开后立即生效，无需重启）" FontWeight="SemiBold" />
+                    <TextBlock Text="关闭时不会创建、不会写入任何日志文件；程序仅在内存保留最近 2000 条用于诊断。&#10;崩溃报告默认仍会生成（可在此关闭）。"
+                               TextWrapping="Wrap" Foreground="#4A4A55" Margin="0,0,0,8" />
+
+                    <TextBlock Text="日志级别" Style="{StaticResource FieldLabel}" />
+                    <ComboBox ItemsSource="{Binding LevelOptions}" DisplayMemberPath="Display"
+                              SelectedValuePath="Value" SelectedValue="{Binding MinimumLevel}" />
+
+                    <CheckBox IsChecked="{Binding IncludeRawFrames}"
+                              Content="把原始报文写入日志（体积较大，且可能包含现场数据）" />
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="单文件 MB" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding MaxFileSizeMb}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="保留天数" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding RetentionDays}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="总容量 MB" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding TotalSizeMb}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock Text="日志目录（空 = 程序同级 logs 目录；建议保持默认）" Style="{StaticResource FieldLabel}" />
+                    <TextBox Text="{Binding DirectoryOverride}" />
+
+                    <CheckBox IsChecked="{Binding WriteCrashReports}" Content="生成崩溃报告" />
+                    <TextBlock Text="崩溃报告保留份数" Style="{StaticResource FieldLabel}" />
+                    <TextBox Text="{Binding CrashReportsToKeep}" Width="80" HorizontalAlignment="Left" />
+
+                    <TextBlock Text="显示与监视" Style="{StaticResource SectionHeader}" />
+                    <TextBlock Text="监视界面最大行数（M1 欠账 D-3，原为硬编码 20000）" Style="{StaticResource FieldLabel}" />
+                    <TextBox Text="{Binding MonitorUiCapacity}" />
+                    <CheckBox IsChecked="{Binding ColorizeDirections}"
+                              Content="报文监视按 TX/RX 着色（关闭后仍保留 TX/RX 文字）" />
+                    <TextBlock Text="监视表刷新周期 ms（不低于 200）" Style="{StaticResource FieldLabel}" />
+                    <TextBox Text="{Binding WatchTableIntervalMs}" />
+
+                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                        <Button Content="应用设置" Command="{Binding ApplyCommand}" FontWeight="SemiBold" />
+                        <Button Content="刷新预览" Command="{Binding RefreshPreviewCommand}" />
+                        <Button Content="恢复默认" Command="{Binding ResetSettingsCommand}" />
+                    </StackPanel>
+
+                    <TextBlock Text="诊断" Style="{StaticResource SectionHeader}" />
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="打开日志目录" Command="{Binding OpenLogFolderCommand}" />
+                        <Button Content="打开数据目录" Command="{Binding OpenDataFolderCommand}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                        <Button Content="打开记录目录" Command="{Binding OpenCaptureFolderCommand}" />
+                        <Button Content="复制诊断信息" Command="{Binding CopyDiagnosticsCommand}" />
+                        <Button Content="生成诊断包" Command="{Binding CreateBundleCommand}" />
+                    </StackPanel>
+                    <Button Content="清理历史日志" Command="{Binding ClearLogsCommand}" HorizontalAlignment="Left" Margin="0,6,0,0" />
+
+                    <TextBlock Text="{Binding Message}" Foreground="#1B5E9B" TextWrapping="Wrap" Margin="0,10,0,0" />
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" BorderBrush="{StaticResource BorderBrushLight}" BorderThickness="1" CornerRadius="3"
+                    Padding="10" Background="White" Margin="0,0,0,8">
+                <StackPanel>
+                    <TextBlock Text="运行环境" Style="{StaticResource SectionHeader}" Margin="0,0,0,6" />
+                    <TextBlock Text="{Binding VersionText}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding ActiveLogFileText}" TextWrapping="Wrap" Margin="0,6,0,0" />
+                    <TextBlock Text="{Binding LogDirectoryText}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding DataDirectoryText}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding CaptureDirectoryText}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="1" BorderBrush="{StaticResource BorderBrushLight}" BorderThickness="1" CornerRadius="3"
+                    Background="White" Padding="8">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="已保存的扫描方案 / 报文模板 / 设备目标（M2 持久化）"
+                               Style="{StaticResource SectionHeader}" />
+
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ComboBox Grid.Column="0" ItemsSource="{Binding Plans}" DisplayMemberPath="DisplayText"
+                                  SelectedItem="{Binding SelectedPlan}" />
+                        <Button Grid.Column="1" Content="删除方案" Command="{Binding DeletePlanCommand}" />
+                    </Grid>
+
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ComboBox Grid.Column="0" ItemsSource="{Binding Templates}" DisplayMemberPath="DisplayText"
+                                  SelectedItem="{Binding SelectedTemplate}" />
+                        <Button Grid.Column="1" Content="删除模板" Command="{Binding DeleteTemplateCommand}" />
+                    </Grid>
+
+                    <Grid Grid.Row="3">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ComboBox Grid.Column="0" ItemsSource="{Binding Targets}" DisplayMemberPath="DisplayText"
+                                  SelectedItem="{Binding SelectedTarget}" />
+                        <Button Grid.Column="1" Content="删除目标" Command="{Binding DeleteTargetCommand}" />
+                    </Grid>
+
+                    <TextBlock Grid.Row="4" Text="最近日志（内存环形缓冲，始终可用）" Style="{StaticResource SectionHeader}" />
+                    <TextBox Grid.Row="6" Text="{Binding RingPreview}" IsReadOnly="True" FontFamily="Consolas"
+                             FontSize="11" VerticalScrollBarVisibility="Auto" AcceptsReturn="True"
+                             TextWrapping="NoWrap" HorizontalScrollBarVisibility="Auto" />
+                </Grid>
+            </Border>
+
+            <TextBlock Grid.Row="2" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#4A4A55"
+                       Text="日志与诊断数据仅保存在本机，程序不会自动上传。需要反馈问题时，请使用“复制诊断信息”或“生成诊断包”。" />
+        </Grid>
+    </Grid>
+</UserControl>
