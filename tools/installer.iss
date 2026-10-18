@@ -48,7 +48,10 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 ; 主程序与提权助手都不需要安装时提权；助手在“应用配置”时按需 UAC（AD-08）
 PrivilegesRequired=admin
-PrivilegesRequiredOverridesAllowed=dialog
+; 允许命令行覆盖提权要求：受限环境（%TEMP% 对提权进程不可写、或无法提权）可用
+;   通讯测试工具-x.y.z-安装包.exe /CURRENTUSER
+; 装到 %LOCALAPPDATA%\Programs\通讯测试工具，不需要管理员，也不弹 UAC。
+PrivilegesRequiredOverridesAllowed=dialog commandline
 ; 不删除用户数据（卸载时保留设置与日志，便于复查）
 UninstallDisplayIcon={app}\{#AppExeName}
 CloseApplications=yes

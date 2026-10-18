@@ -164,7 +164,19 @@ artifacts\publish\
 
 4. 安全软件（如 Kaspersky）对**首次运行**的未签名安装包可能短暂拦截；放行后重试通常即可，长期方案是正式代码签名（R-20 / Q-1）。
 
-> 实测记录（2026-10-19）：同一安装包在同一机器上，`%TEMP%` 指向可写目录时安装成功、退出码 0、675 个文件；把 TEMP 指回默认目录后再次静默安装同样成功（退出码 0）。两次都已用 `unins000.exe /VERYSILENT` 卸载干净，无残留文件与 `HKLM` 卸载项。
+**随包的两个绕过入口**（`artifacts\installer\` 下）：
+
+- `安装-受限环境（双击我）.cmd`：自提权 → 把 `TEMP`/`TMP` 指到 `%LOCALAPPDATA%\CommTestTool\install-temp`（不可写时退到安装包同目录的 `install-temp`）→ 再启动同目录的安装包。
+  关键是**先提权再改 TEMP**，这样安装包进程继承到的是可写的临时目录；直接双击安装包不会继承你在 PowerShell 里改过的 TEMP。
+- 免提权安装：`通讯测试工具-x.y.z-安装包.exe /CURRENTUSER`，装到 `%LOCALAPPDATA%\Programs\通讯测试工具`，不弹 UAC。
+  （`installer.iss` 的 `PrivilegesRequiredOverridesAllowed` 已包含 `commandline`；不加 `/CURRENTUSER` 时行为不变，仍是装到 `Program Files`。）
+
+> 实测记录（2026-10-19）：同一安装包在同一机器上，`%TEMP%` 指向可写目录时安装成功、退出码 0、675 个文件；
+> 把 TEMP 指回默认目录后再次静默安装同样成功（退出码 0）。两次都已用 `unins000.exe /VERYSILENT` 卸载干净，
+> 无残留文件与 `HKLM` 卸载项。
+>
+> 但**从资源管理器双击启动**时仍会报错误 5（提权进程拿不到 `%TEMP%` 的写权限），而由代理进程启动的同一安装包可以成功——
+> 说明这是该机器上"谁启动进程"决定的权限差异（沙箱/安全软件层面的限制），不是安装包本身的问题。受限机器请用上面的启动器。
 
 ## 5. 已知环境相关注意事项
 

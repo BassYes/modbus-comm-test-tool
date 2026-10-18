@@ -181,6 +181,16 @@ Write-Host '  提示：本包的 helper\Comm.NetConfigHelper.exe 是网卡配置
     $kind = '便携安装包（回退方案，无 Inno Setup）'
 }
 
+# ---------------------------------------------------------------- 受限环境启动器
+# 有些机器的 %TEMP% 对提权进程不可写，安装包会在解包阶段报「错误 5：拒绝访问」。
+# 把启动器放到与安装包同一目录：双击它 → 先提权 → 把 TEMP 指到可写目录 → 再启动安装包。
+$launcher = Join-Path $PSScriptRoot '安装-受限环境.cmd'
+if (Test-Path -LiteralPath $launcher) {
+    $launcherTarget = Join-Path $installerDir '安装-受限环境（双击我）.cmd'
+    Copy-Item -LiteralPath $launcher -Destination $launcherTarget -Force
+    Write-Host "已随包附上受限环境启动器：$launcherTarget" -ForegroundColor Cyan
+}
+
 # ---------------------------------------------------------------- 可选签名
 if ($Sign) {
     Write-Host "签名安装包产物……" -ForegroundColor Cyan
