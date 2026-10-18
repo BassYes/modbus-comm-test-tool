@@ -53,6 +53,8 @@ public static class ErrorCodes
     public const string TransportWriteFailed = "TRN-1005";
     public const string TransportPortBusy = "TRN-1006";
     public const string TransportAccessDenied = "TRN-1007";
+    /// <summary>串口参数重配（R-11 未知波特率/校验位扫描）失败。</summary>
+    public const string TransportSerialReconfigureFailed = "TRN-1008";
 
     // 成帧
     public const string FramingChecksum = "FRM-2001";
@@ -73,6 +75,8 @@ public static class ErrorCodes
     public const string ValidationBroadcastWrite = "VAL-4005";
     public const string ValidationScanWriteBlocked = "VAL-4006";
     public const string ValidationNetworkRange = "VAL-4007";
+    /// <summary>参数扫描需要可重配的串口会话（R-11）。</summary>
+    public const string ValidationParameterScanNotSerial = "VAL-4008";
 
     // 平台
     public const string PlatformPermission = "PLT-5001";

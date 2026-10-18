@@ -55,16 +55,44 @@ public sealed record LogEntry(
     }
 }
 
-/// <summary>程序与运行环境信息，用于诊断包与关于页面。</summary>
+/// <summary>程序与运行环境信息，用于诊断包与“关于”页面（R-21 X-8 / X-9）。</summary>
 public static class AppInfo
 {
-    public static string Version => typeof(AppInfo).Assembly.GetName().Version?.ToString(3) ?? "0.1.0";
+    /// <summary>程序集版本（单一来源：Directory.Build.props 的 <c>Version</c>）。</summary>
+    public static string Version =>
+        Metadata("ProductVersion")
+        ?? typeof(AppInfo).Assembly.GetName().Version?.ToString(3)
+        ?? "0.0.0";
+
+    /// <summary>构建时间（UTC，构建时注入）。</summary>
+    public static string BuildTimeUtc => Metadata("BuildTimeUtc") ?? "未知";
+
+    /// <summary>构建时的提交号（简短哈希）；非 Git 构建时为 <c>unknown</c>。</summary>
+    public static string Commit => Metadata("SourceRevisionId") ?? "unknown";
+
     public static string ProductName => "通讯测试工具";
     public static string RuntimeVersion => Environment.Version.ToString();
     public static string OsVersion => Environment.OSVersion.VersionString;
     public static string MachineName => Environment.MachineName;
     public static bool Is64Bit => Environment.Is64BitProcess;
 
+    /// <summary>界面标题用：`通讯测试工具 v0.2.5 — Modbus RTU / TCP 现场测试`。</summary>
+    public static string Title => $"{ProductName} v{Version} — Modbus RTU / TCP 现场测试";
+
+    /// <summary>“关于”/设置页用：版本 + 提交号 + 构建时间。若须改名，只需改 Directory.Build.props。</summary>
+    public static string FullVersionText =>
+        $"{ProductName} v{Version}" +
+        (Commit == "unknown" ? string.Empty : $"（提交 {Commit}）") +
+        $"，构建于 {BuildTimeUtc} UTC";
+
     public static string Summary() =>
-        $"{ProductName} v{Version} | 运行时 .NET {RuntimeVersion} | {OsVersion} | {(Is64Bit ? "x64" : "x86")} | 机器名 {MachineName}";
+        $"{ProductName} v{Version}{(Commit == "unknown" ? string.Empty : $"+{Commit}")} | " +
+        $"构建 {BuildTimeUtc} | 运行时 .NET {RuntimeVersion} | {OsVersion} | {(Is64Bit ? "x64" : "x86")} | 机器名 {MachineName}";
+
+    private static string? Metadata(string key) =>
+        typeof(AppInfo).Assembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), false)
+            .OfType<System.Reflection.AssemblyMetadataAttribute>()
+            .FirstOrDefault(a => string.Equals(a.Key, key, StringComparison.OrdinalIgnoreCase))
+            ?.Value;
 }

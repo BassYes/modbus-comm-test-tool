@@ -51,14 +51,20 @@ public sealed record ConnectionSnapshot(
 /// 会话管理：创建/连接/断开传输通道，并向各功能页提供会话与服务实例。
 /// 说明：本类只实现 <see cref="IAsyncDisposable"/>，**退出时必须异步释放**（见 M1 反馈问题 5/10），
 /// 且释放是幂等的——容器释放与手工释放可能都会调用它。
+/// R-11：同时实现 <see cref="ISerialReconfigurator"/>，为未知波特率/校验位扫描提供串口重配与恢复。
 /// </summary>
-public sealed class SessionManager : IAsyncDisposable
+public sealed class SessionManager : IAsyncDisposable, ISerialReconfigurator
 {
     private readonly IFrameObserver _observer;
     private readonly LogGate _log;
     private ModbusSession? _session;
     private SerialProfile? _serialProfile;
     private TcpProfile? _tcpProfile;
+
+    /// <summary>参数扫描前的原始串口配置（R-11：四种终态都要恢复到它）。</summary>
+    private SerialProfile? _originalSerialProfile;
+    private int _originalSilenceThresholdMs = RtuTiming.MinimumSilenceThresholdMs;
+
     private bool _disposed;
 
     public SessionManager(FrameBus frameBus, LogGate log)
@@ -92,13 +98,27 @@ public sealed class SessionManager : IAsyncDisposable
     public async Task<Result<string>> ConnectSerialAsync(SerialProfile profile, int silenceThresholdMs,
         CancellationToken cancellationToken = default)
     {
+        // R-11：用户主动连接时记住“原始参数”，参数扫描结束后要恢复到它。
+        _originalSerialProfile = profile;
+        _originalSilenceThresholdMs = silenceThresholdMs;
+        return await OpenSerialAsync(profile, silenceThresholdMs, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>打开（或重开）串口会话。参数扫描切换参数时也走这条路径。</summary>
+    private async Task<Result<string>> OpenSerialAsync(SerialProfile profile, int silenceThresholdMs,
+        CancellationToken cancellationToken)
+    {
         await DisconnectAsync().ConfigureAwait(false);
+
+        // F-5：静默阈值随波特率变化。固定 5 ms 在 1200 bps（3.5 字符 ≈ 32 ms）下会误拆帧。
+        int silence = RtuTiming.ComputeSilenceThresholdMs(profile.BaudRate, silenceThresholdMs);
+        int effectiveTimeout = RtuTiming.EffectiveResponseTimeoutMs(profile.ResponseTimeoutMs, profile.BaudRate);
 
         var options = new SessionOptions
         {
             SessionId = Guid.NewGuid().ToString("N")[..8],
             Name = profile.Name,
-            ResponseTimeoutMs = profile.ResponseTimeoutMs,
+            ResponseTimeoutMs = effectiveTimeout,
             RetryCount = profile.RetryCount,
             TurnaroundDelayMs = profile.TurnaroundDelayMs,
             SuppressEcho = profile.SuppressEcho,
@@ -106,7 +126,7 @@ public sealed class SessionManager : IAsyncDisposable
         };
 
         var channel = new SerialChannel(profile.ToSerialSettings());
-        var session = new ModbusSession(channel, new ModbusRtuCodec(silenceThresholdMs), options, _observer);
+        var session = new ModbusSession(channel, new ModbusRtuCodec(silence), options, _observer);
 
         try
         {
@@ -122,16 +142,17 @@ public sealed class SessionManager : IAsyncDisposable
         _session = session;
         _serialProfile = profile;
         _tcpProfile = null;
-        SilenceThresholdMs = Math.Max(1, silenceThresholdMs);
+        SilenceThresholdMs = silence;
         Kind = ConnectionKind.Serial;
         DefaultUnitId = 1;
         Snapshot = new ConnectionSnapshot(ConnectionKind.Serial, profile.PortName, session.Codec.Name,
             $"{profile.BaudRate},{profile.DataBits},{SerialSettings.ParityCode(profile.Parity)},{SerialSettings.StopBitsCode(profile.StopBits)}" +
-            $" · 超时 {profile.ResponseTimeoutMs} ms · 重试 {profile.RetryCount}",
+            $" · 超时 {effectiveTimeout} ms · 重试 {profile.RetryCount}",
             DefaultUnitId);
 
         _log.Info("Session",
-            $"串口已连接：{profile.PortName} {profile.BaudRate},{profile.DataBits},{SerialSettings.ParityCode(profile.Parity)},{SerialSettings.StopBitsCode(profile.StopBits)}；超时 {profile.ResponseTimeoutMs} ms，重试 {profile.RetryCount}",
+            $"串口已连接：{profile.PortName} {profile.BaudRate},{profile.DataBits},{SerialSettings.ParityCode(profile.Parity)},{SerialSettings.StopBitsCode(profile.StopBits)}；" +
+            $"超时 {effectiveTimeout} ms，重试 {profile.RetryCount}，静默阈值 {silence} ms",
             session.SessionId);
         CurrentChanged?.Invoke(this, EventArgs.Empty);
         return Result<string>.Ok(StatusText);
@@ -199,6 +220,91 @@ public sealed class SessionManager : IAsyncDisposable
         if (Snapshot is { Kind: ConnectionKind.Tcp } snapshot)
         {
             Snapshot = snapshot with { UnitId = unitId };
+        }
+    }
+
+    // ------------------------------------------------- R-11 串口参数扫描：重配与恢复
+
+    /// <summary>参数扫描是否需要串口重配；TCP 会话返回 false。</summary>
+    public bool CanReconfigure => Kind == ConnectionKind.Serial && IsConnected && _originalSerialProfile is not null;
+
+    /// <summary>扫描前的原始串口参数（用于恢复与界面显示“原 4800-8-N-1”）。</summary>
+    public SerialSettings? OriginalSettings => _originalSerialProfile?.ToSerialSettings();
+
+    /// <summary>当前实际打开的串口参数（扫描期间会随组合变化）。</summary>
+    public SerialSettings? ActiveSettings => _serialProfile?.ToSerialSettings();
+
+    /// <summary>
+    /// 切换到指定串口参数。更换参数 = 关串口 + 重开 + 清缓冲；失败返回 null（已记日志）。
+    /// 调用方负责在四个终态调用 <see cref="RestoreAsync"/>。
+    /// </summary>
+    public async Task<ModbusSession?> ApplyAsync(SerialSettings settings, int settleMs, CancellationToken cancellationToken)
+    {
+        var original = _originalSerialProfile;
+        if (original is null)
+        {
+            _log.Warning("Session", "参数扫描：没有可用的原始串口配置，无法切换参数");
+            return null;
+        }
+
+        var profile = original with
+        {
+            PortName = settings.PortName,
+            BaudRate = settings.BaudRate,
+            DataBits = settings.DataBits,
+            Parity = settings.Parity,
+            StopBits = settings.StopBits
+        };
+
+        var result = await OpenSerialAsync(profile, _originalSilenceThresholdMs, cancellationToken).ConfigureAwait(false);
+        if (!result.IsSuccess)
+        {
+            _log.Warning("Session",
+                $"参数扫描：切换到 {settings.PortName} {settings.BaudRate},{settings.DataBits}," +
+                $"{SerialSettings.ParityCode(settings.Parity)},{SerialSettings.StopBitsCode(settings.StopBits)} 失败：" +
+                (result.Error?.Message ?? "未知原因"));
+            return null;
+        }
+
+        // USB 转串口重开后需要稳定等待（可配，默认 150 ms）。
+        await Task.Delay(Math.Clamp(settleMs, 0, 5000), cancellationToken).ConfigureAwait(false);
+        return _session;
+    }
+
+    /// <summary>恢复到扫描前的原始参数；恢复失败时明确置为“未连接”，不静默停留在错误参数。</summary>
+    public async Task<SerialRestoreResult> RestoreAsync(CancellationToken cancellationToken)
+    {
+        var original = _originalSerialProfile;
+        if (original is null) return SerialRestoreResult.Ok;
+
+        try
+        {
+            // 取消路径也必须恢复，因此不受外部令牌影响，只给自己一个超时。
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+            var result = await OpenSerialAsync(original, _originalSilenceThresholdMs, timeout.Token).ConfigureAwait(false);
+            if (result.IsSuccess)
+            {
+                _log.Info("Session",
+                    $"已恢复原串口参数：{original.PortName} {original.BaudRate},{original.DataBits}," +
+                    $"{SerialSettings.ParityCode(original.Parity)},{SerialSettings.StopBitsCode(original.StopBits)}");
+                return SerialRestoreResult.Ok;
+            }
+
+            await DisconnectAsync().ConfigureAwait(false);
+            return new SerialRestoreResult(false, result.Error?.Message ?? "恢复原串口参数失败");
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Session", "恢复原串口参数时异常", ex);
+            try
+            {
+                await DisconnectAsync().ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                // 已尽力断开；不掩盖原始错误
+            }
+            return new SerialRestoreResult(false, ex.Message);
         }
     }
 

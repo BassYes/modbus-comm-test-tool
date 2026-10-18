@@ -246,7 +246,8 @@ public sealed class SettingsStore
 {
     public SettingsStore(string? filePath = null)
     {
-        Path = filePath ?? System.IO.Path.Combine(AppContext.BaseDirectory, "data", "settings.json");
+        // R-21 X-2：默认落在 AppPaths 解析出的数据目录（便携优先，不可写时回退 %LOCALAPPDATA%）。
+        Path = filePath ?? System.IO.Path.Combine(AppPaths.DataDirectory, "settings.json");
     }
 
     public string Path { get; }

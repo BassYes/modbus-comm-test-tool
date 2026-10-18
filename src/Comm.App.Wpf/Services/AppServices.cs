@@ -1,5 +1,6 @@
 using Comm.Capture;
 using Comm.Diagnostics;
+using Comm.Scanning;
 using Comm.Settings;
 
 namespace Comm.App.Wpf.Services;
@@ -45,9 +46,14 @@ public sealed class AppServices
     public DialogService Dialogs { get; }
     public TaskStatusService Tasks { get; }
 
-    public string DataDirectory => System.IO.Path.Combine(AppContext.BaseDirectory, "data");
+    /// <summary>实际使用的数据目录（R-21 X-2：便携优先，不可写时回退 %LOCALAPPDATA%）。</summary>
+    public string DataDirectory => Comm.Diagnostics.AppPaths.DataDirectory;
+
+    public string DataDirectoryText => Comm.Diagnostics.AppPaths.ToDisplayText();
+
     public string CaptureDirectory => Settings.LastCaptureDirectory ?? System.IO.Path.Combine(DataDirectory, "captures");
-    public string ExportDirectory => Settings.LastExportDirectory ?? System.IO.Path.Combine(AppContext.BaseDirectory, "exports");
+
+    public string ExportDirectory => Settings.LastExportDirectory ?? Comm.Diagnostics.AppPaths.ExportsDirectory;
 
     public string SaveSettings(AppSettings settings)
     {
@@ -61,10 +67,16 @@ public sealed class AppServices
     /// <summary>跨页面传递“请载入这段报文”（寄存器定位 → 报文工具）。</summary>
     public event EventHandler<HexPayload>? HexRequested;
 
+    /// <summary>R-11：把参数扫描结果里的串口参数回填到连接中心（并可选择立即重连）。</summary>
+    public event EventHandler<ApplySerialParametersRequest>? SerialParametersRequested;
+
     /// <summary>跨页面通知（显示在全局状态栏的最后一条消息）。</summary>
     public event EventHandler<string>? Notified;
 
     public void RequestHex(string hex, string message) => HexRequested?.Invoke(this, new HexPayload(hex, message));
+
+    public void RequestSerialParameters(SerialCombination combination, bool reconnect) =>
+        SerialParametersRequested?.Invoke(this, new ApplySerialParametersRequest(combination, reconnect));
 
     public void Notify(string message) => Notified?.Invoke(this, message);
 
@@ -128,3 +140,6 @@ public sealed class AppServices
 
 /// <summary>“请把这段十六进制载入报文工具”的跨页面消息。</summary>
 public sealed record HexPayload(string Hex, string Message);
+
+/// <summary>“请把这组串口参数应用到连接中心”的跨页面消息（R-11）。</summary>
+public sealed record ApplySerialParametersRequest(SerialCombination Combination, bool Reconnect);

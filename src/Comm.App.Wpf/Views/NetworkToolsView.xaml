@@ -9,6 +9,7 @@
 
         <Border Grid.Column="0" BorderBrush="{StaticResource BorderBrushLight}" BorderThickness="1" CornerRadius="3"
                 Padding="12" Margin="0,0,12,0" Background="{StaticResource PanelBrush}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel>
                 <TextBlock Text="IPv4 子网计算" Style="{StaticResource SectionHeader}" />
 
@@ -68,12 +69,12 @@
                     <TextBlock Grid.Row="7" Grid.Column="0" Text="IP 二进制" />
                     <!-- 反馈问题 1：二进制串较长，改用只读 TextBox 自动换行 + 提示，避免在窄窗口下被截断 -->
                     <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding BinaryText}" IsReadOnly="True"
-                             FontFamily="Consolas" FontSize="12" TextWrapping="Wrap"
+                             FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="Wrap"
                              HorizontalScrollBarVisibility="Auto" ToolTip="{Binding BinaryText}"
                              BorderThickness="0" Background="Transparent" Padding="0" Margin="0,0,0,2" />
                     <TextBlock Grid.Row="8" Grid.Column="0" Text="掩码二进制" />
                     <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding MaskBinaryText}" IsReadOnly="True"
-                             FontFamily="Consolas" FontSize="12" TextWrapping="Wrap"
+                             FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="Wrap"
                              HorizontalScrollBarVisibility="Auto" ToolTip="{Binding MaskBinaryText}"
                              BorderThickness="0" Background="Transparent" Padding="0" Margin="0,0,0,2" />
                     <TextBlock Grid.Row="9" Grid.Column="0" Text="同网段判断" />
@@ -84,6 +85,7 @@
 
                 <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="#1B5E9B" Margin="0,10,0,0" />
             </StackPanel>
+            </ScrollViewer>
         </Border>
 
         <Grid Grid.Column="1">
@@ -124,7 +126,7 @@
                         <TextBlock Text="主机地址列表（超过上限时不展开）" Style="{StaticResource SectionHeader}" Margin="0,0,10,0" />
                         <Button Content="复制列表" Command="{Binding CopyHostListCommand}" />
                     </StackPanel>
-                    <TextBox Grid.Row="1" Text="{Binding HostListText}" IsReadOnly="True" FontFamily="Consolas"
+                    <TextBox Grid.Row="1" Text="{Binding HostListText}" IsReadOnly="True" FontFamily="{StaticResource MonoFont}"
                              FontSize="12" VerticalScrollBarVisibility="Auto" AcceptsReturn="True" TextWrapping="NoWrap" />
                 </Grid>
             </Border>

@@ -54,10 +54,17 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _logDirectoryText = string.Empty;
     [ObservableProperty] private string _activeLogFileText = string.Empty;
     [ObservableProperty] private string _versionText = AppInfo.Summary();
+
+    /// <summary>X-9：“关于”行：版本 + 提交号 + 构建时间。</summary>
+    public string AboutText => AppInfo.FullVersionText;
+
     [ObservableProperty] private string _dataDirectoryText = string.Empty;
     [ObservableProperty] private string _captureDirectoryText = string.Empty;
     [ObservableProperty] private string _message = string.Empty;
     [ObservableProperty] private string _ringPreview = string.Empty;
+
+    /// <summary>X-8：环境自检报告（运行“环境检查”后填充）。</summary>
+    [ObservableProperty] private string _environmentReportText = string.Empty;
 
     private void LoadFromSettings()
     {
@@ -77,9 +84,158 @@ public partial class SettingsViewModel : ObservableObject
 
         LogDirectoryText = _app.Log.Directory + (string.IsNullOrEmpty(_app.Log.DirectoryWarning) ? string.Empty : $"（{_app.Log.DirectoryWarning}）");
         ActiveLogFileText = _app.Log.ActiveLogFile ?? "（日志关闭时不会创建文件）";
-        DataDirectoryText = _app.DataDirectory;
+        DataDirectoryText = _app.DataDirectoryText;
         CaptureDirectoryText = _app.CaptureDirectory;
         UpdateRingPreview();
+    }
+
+    /// <summary>X-2：显示实际数据目录、便携优先策略与两个候选目录。</summary>
+    public string DirectoryPolicyText
+    {
+        get
+        {
+            var info = AppPaths.Info;
+            var lines = new List<string>
+            {
+                $"实际数据目录：{info.Directory}",
+                $"便携目录（程序同级）：{AppPaths.PortableDataDirectory}；便携标志 portable.flag：{(AppPaths.HasPortableFlag ? "存在" : "不存在")}",
+                $"用户目录（不可写时回退）：{AppPaths.UserDataDirectory}",
+                "策略：程序目录可写 → 便携 data/；不可写 → %LOCALAPPDATA%\\通讯测试工具\\data。"
+            };
+            if (!string.IsNullOrEmpty(info.FallbackReason)) lines.Add($"提示：{info.FallbackReason}");
+            return string.Join(Environment.NewLine, lines);
+        }
+    }
+
+    /// <summary>X-8：采集本机环境并生成报告（仅本地生成与保存，不上传）。</summary>
+    private string BuildEnvironmentReport()
+    {
+        IReadOnlyList<string> ports;
+        try
+        {
+            ports = Comm.Transport.SerialChannel.GetPortNames();
+        }
+        catch (Exception)
+        {
+            ports = Array.Empty<string>();
+        }
+
+        IReadOnlyList<string> adapters;
+        try
+        {
+            adapters = Comm.Network.NetworkAdapters.Read()
+                .Select(a => $"{a.Name}｜{a.Description}｜{a.Status}｜IPv4 {a.PrimaryIpv4}/{a.PrimaryMask}｜网关 {a.PrimaryGateway}｜MAC {a.MacAddress}｜{a.SpeedText}" +
+                             (a.IsVirtual ? "｜（虚拟/VPN）" : string.Empty))
+                .ToArray();
+        }
+        catch (Exception ex)
+        {
+            adapters = new[] { $"网卡枚举失败：{ex.Message}" };
+        }
+
+        var display = DescribeDisplay();
+        return EnvironmentReport.Build(ports, adapters, display);
+    }
+
+    private static string DescribeDisplay()
+    {
+        try
+        {
+            var window = System.Windows.Application.Current?.MainWindow;
+            if (window is null) return "未检测（无主窗口）";
+            var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(window);
+            var area = System.Windows.SystemParameters.WorkArea;
+            return $"窗口 DPI 缩放：{(dpi.DpiScaleX * 100):F0}%（{dpi.PixelsPerDip:F2} 像素/DIP）；" +
+                   $"主屏工作区：{area.Width:F0}×{area.Height:F0} DIP；窗口最小尺寸：900×480 DIP";
+        }
+        catch (Exception ex)
+        {
+            return $"检测失败：{ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void CheckEnvironment()
+    {
+        EnvironmentReportText = BuildEnvironmentReport();
+        Message = "环境检查已完成（报告可在右侧查看、复制或保存）。";
+        _app.Log.Info("Environment", "已执行环境自检（X-8）");
+    }
+
+    [RelayCommand]
+    private void CopyEnvironmentReport()
+    {
+        var report = string.IsNullOrEmpty(EnvironmentReportText) ? BuildEnvironmentReport() : EnvironmentReportText;
+        EnvironmentReportText = report;
+        try
+        {
+            System.Windows.Clipboard.SetText(report);
+            Message = "环境报告已复制到剪贴板。";
+        }
+        catch (Exception ex)
+        {
+            _app.Dialogs.Error("复制失败", ex.Message);
+        }
+    }
+
+    [RelayCommand]
+    private void SaveEnvironmentReport()
+    {
+        var report = string.IsNullOrEmpty(EnvironmentReportText) ? BuildEnvironmentReport() : EnvironmentReportText;
+        EnvironmentReportText = report;
+
+        var path = _app.Dialogs.SaveFile("保存环境报告", "文本文件 (*.txt)|*.txt",
+            $"环境报告-{DateTime.Now:yyyyMMdd-HHmmss}.txt");
+        if (string.IsNullOrEmpty(path)) return;
+
+        try
+        {
+            File.WriteAllText(path, report, new System.Text.UTF8Encoding(true));
+            Message = $"环境报告已保存：{path}";
+        }
+        catch (Exception ex)
+        {
+            _app.Dialogs.Error("保存失败", ex.Message);
+        }
+    }
+
+    /// <summary>X-2：在程序目录创建 portable.flag，下次启动即使用便携 data/。</summary>
+    [RelayCommand]
+    private void CreatePortableFlag()
+    {
+        var path = Path.Combine(AppPaths.BaseDirectory, AppPaths.PortableFlagName);
+        try
+        {
+            Directory.CreateDirectory(AppPaths.BaseDirectory);
+            File.WriteAllText(path, $"便携标记，由“设置与日志”页创建于 {DateTimeOffset.Now:O}" + Environment.NewLine);
+            Message = $"已创建便携标记：{path}（重启后使用程序同级 data/ 目录）";
+            OnPropertyChanged(nameof(DirectoryPolicyText));
+        }
+        catch (Exception ex)
+        {
+            _app.Dialogs.Error("创建失败", ex.Message);
+        }
+    }
+
+    [RelayCommand]
+    private void MigrateToPortable() => Migrate(AppPaths.PortableDataDirectory, "便携");
+
+    [RelayCommand]
+    private void MigrateToUserData() => Migrate(AppPaths.UserDataDirectory, "用户");
+
+    private void Migrate(string target, string label)
+    {
+        if (string.Equals(target, AppPaths.DataDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            Message = $"当前已经在使用{label}数据目录：{target}";
+            return;
+        }
+
+        var error = AppPaths.MigrateSettings(AppPaths.DataDirectory, target, overwrite: false);
+        Message = string.IsNullOrEmpty(error)
+            ? $"已把当前设置复制到{label}目录：{target}（未覆盖已有文件；重启后按目录策略生效）"
+            : error;
+        OnPropertyChanged(nameof(DirectoryPolicyText));
     }
 
     private void UpdateRingPreview()

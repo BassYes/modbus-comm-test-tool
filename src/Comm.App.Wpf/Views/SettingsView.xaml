@@ -77,6 +77,22 @@
                     </StackPanel>
                     <Button Content="清理历史日志" Command="{Binding ClearLogsCommand}" HorizontalAlignment="Left" Margin="0,6,0,0" />
 
+                    <!-- R-21 X-8：环境自检（仅本机生成，不上传） -->
+                    <TextBlock Text="环境自检（X-8）" Style="{StaticResource SectionHeader}" />
+                    <TextBlock Text="{Binding DirectoryPolicyText}" TextWrapping="Wrap" Foreground="#4A4A55" />
+                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                        <Button Content="环境检查" Command="{Binding CheckEnvironmentCommand}" FontWeight="SemiBold" />
+                        <Button Content="复制报告" Command="{Binding CopyEnvironmentReportCommand}" />
+                        <Button Content="保存报告" Command="{Binding SaveEnvironmentReportCommand}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                        <Button Content="创建 portable.flag（便携）" Command="{Binding CreatePortableFlagCommand}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                        <Button Content="迁移设置 → 便携目录" Command="{Binding MigrateToPortableCommand}" />
+                        <Button Content="迁移设置 → 用户目录" Command="{Binding MigrateToUserDataCommand}" />
+                    </StackPanel>
+
                     <TextBlock Text="{Binding Message}" Foreground="#1B5E9B" TextWrapping="Wrap" Margin="0,10,0,0" />
                 </StackPanel>
             </ScrollViewer>
@@ -93,6 +109,7 @@
                     Padding="10" Background="White" Margin="0,0,0,8">
                 <StackPanel>
                     <TextBlock Text="运行环境" Style="{StaticResource SectionHeader}" Margin="0,0,0,6" />
+                    <TextBlock Text="{Binding AboutText}" TextWrapping="Wrap" FontWeight="SemiBold" />
                     <TextBlock Text="{Binding VersionText}" TextWrapping="Wrap" />
                     <TextBlock Text="{Binding ActiveLogFileText}" TextWrapping="Wrap" Margin="0,6,0,0" />
                     <TextBlock Text="{Binding LogDirectoryText}" TextWrapping="Wrap" />
@@ -148,7 +165,11 @@
                     </Grid>
 
                     <TextBlock Grid.Row="4" Text="最近日志（内存环形缓冲，始终可用）" Style="{StaticResource SectionHeader}" />
-                    <TextBox Grid.Row="6" Text="{Binding RingPreview}" IsReadOnly="True" FontFamily="Consolas"
+                    <TextBox Grid.Row="5" Text="{Binding EnvironmentReportText}" IsReadOnly="True"
+                             FontFamily="{StaticResource MonoFont}" FontSize="11"
+                             VerticalScrollBarVisibility="Auto" AcceptsReturn="True"
+                             TextWrapping="NoWrap" HorizontalScrollBarVisibility="Auto" MinHeight="80" />
+                    <TextBox Grid.Row="6" Text="{Binding RingPreview}" IsReadOnly="True" FontFamily="{StaticResource MonoFont}"
                              FontSize="11" VerticalScrollBarVisibility="Auto" AcceptsReturn="True"
                              TextWrapping="NoWrap" HorizontalScrollBarVisibility="Auto" />
                 </Grid>

@@ -84,7 +84,8 @@ public sealed class SerialChannel : ITransportChannel
             StateChanged?.Invoke(this, new ChannelStateChanged(ChannelState.Faulted, "串口被占用或权限不足",
                 new ErrorInfo(ErrorCodes.TransportPortBusy, ErrorCategory.Transport, Severity.Error,
                     $"无法打开 {_settings.PortName}：串口被其他程序占用，或当前用户权限不足",
-                    ex.Message, Retriable: false, Hint: "关闭占用该串口的程序后重试；必要时以管理员身份运行")));
+                    ex.Message, Retriable: false, Hint: "关闭占用该串口的程序（常见：厂商调试软件、另一个串口工具）后重试；" +
+                                                            "必要时以管理员身份运行。")));
             throw new CommException(new ErrorInfo(ErrorCodes.TransportPortBusy, ErrorCategory.Transport, Severity.Error,
                 $"无法打开 {_settings.PortName}：串口被其他程序占用，或当前用户权限不足", ex.Message,
                 Hint: "关闭占用该串口的程序后重试"), ex);
@@ -92,12 +93,36 @@ public sealed class SerialChannel : ITransportChannel
         catch (Exception ex) when (ex is IOException or ArgumentException or InvalidOperationException)
         {
             State = ChannelState.Faulted;
+            // X-6：把常见现场原因写进提示（驱动缺失、COM10+ 命名、热插拔）。
             var error = new ErrorInfo(ErrorCodes.TransportOpenFailed, ErrorCategory.Transport, Severity.Error,
                 $"无法打开串口 {_settings.PortName}：{ex.Message}", ex.ToString(),
-                Hint: "确认串口存在、参数正确，并已插入适配器");
+                Hint: SerialOpenHint(_settings.PortName));
             StateChanged?.Invoke(this, new ChannelStateChanged(ChannelState.Faulted, error.Message, error));
             throw new CommException(error, ex);
         }
+    }
+
+    /// <summary>串口打开失败的现场提示（规划 22.6.2 X-6）。</summary>
+    public static string SerialOpenHint(string portName)
+    {
+        var hints = new List<string>
+        {
+            "确认适配器已插入、设备管理器中出现该端口（USB 转串口常见驱动：CH340 / CP210x / FTDI，需自行安装）",
+            "确认端口未被其他程序占用（同一串口只能被一个程序打开）"
+        };
+
+        int index = -1;
+        for (int i = 0; i < portName.Length; i++)
+        {
+            if (!char.IsDigit(portName[i])) continue;
+            _ = int.TryParse(portName[i..], out index);
+            break;
+        }
+
+        if (index >= 10)
+            hints.Add($"端口名 {portName} 为 COM10 及以上；个别工具的输入框只接受 COM1~COM9，可在设备管理器“端口设置 → 高级”把端口号改小");
+
+        return string.Join("；", hints);
     }
 
     public Task CloseAsync()

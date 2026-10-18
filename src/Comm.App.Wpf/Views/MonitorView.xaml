@@ -68,7 +68,7 @@
                 <DataGridTextColumn Header="方向" Binding="{Binding DirectionText}" Width="55" FontWeight="Bold" />
                 <DataGridTextColumn Header="从站" Binding="{Binding UnitIdText}" Width="55" />
                 <DataGridTextColumn Header="功能码" Binding="{Binding FunctionText}" Width="65" />
-                <DataGridTextColumn Header="报文" Binding="{Binding Hex}" Width="360" FontFamily="Consolas" />
+                <DataGridTextColumn Header="报文" Binding="{Binding Hex}" Width="360" FontFamily="{StaticResource MonoFont}" />
                 <DataGridTextColumn Header="状态" Binding="{Binding StatusText}" Width="80" />
                 <DataGridTextColumn Header="标记" Binding="{Binding MarkerText}" Width="100" />
                 <DataGridTextColumn Header="耗时ms" Binding="{Binding ElapsedText}" Width="70" />
@@ -87,7 +87,7 @@
                 </Grid.RowDefinitions>
                 <TextBlock Grid.Row="0" Text="选中报文详情" Style="{StaticResource SectionHeader}" Margin="0,0,0,4" />
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                    <TextBlock Text="{Binding DetailText}" FontFamily="Consolas" FontSize="12" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding DetailText}" FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="Wrap" />
                 </ScrollViewer>
                 <TextBlock Grid.Row="2" Text="{Binding StatusText}" Foreground="#4A4A55" TextWrapping="Wrap" />
             </Grid>

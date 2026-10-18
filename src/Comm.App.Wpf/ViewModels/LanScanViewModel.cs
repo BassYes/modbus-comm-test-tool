@@ -21,6 +21,9 @@ public partial class LanScanViewModel : ObservableObject
     private CancellationTokenSource? _cts;
     private PauseGate? _gate;
 
+    /// <summary>X-7：默认网卡是虚拟/VPN 时的提醒（仅提示，不阻止扫描）。</summary>
+    private string _adapterHint = string.Empty;
+
     public LanScanViewModel(AppServices app)
     {
         _app = app;
@@ -29,11 +32,15 @@ public partial class LanScanViewModel : ObservableObject
         _concurrency = scan.LanScanConcurrency;
         _perHostTimeoutMs = scan.LanScanPerHostTimeoutMs;
 
-        var local = NetworkAdapters.Read().FirstOrDefault(a => a.PrimaryIpv4 != "-" && !a.IsLoopback);
+        // X-7：默认选物理且已连接的网卡，避免落在 Hyper-V / VMware / VPN 的虚拟网段上。
+        var local = NetworkAdapters.PreferredAdapter();
         if (local is not null)
         {
             _ipAddress = local.PrimaryIpv4;
             _maskText = local.PrimaryMask == "-" ? "255.255.255.0" : local.PrimaryMask;
+            _adapterHint = local.IsVirtual
+                ? "（注意：默认网卡看起来是虚拟/VPN 网卡，扫描前请确认是否应手选物理网卡）"
+                : string.Empty;
         }
 
         ResultsView = CollectionViewSource.GetDefaultView(Results);
@@ -120,13 +127,14 @@ public partial class LanScanViewModel : ObservableObject
         RangeHint = $"地址数量 {hosts.Count} 个（{hosts[0]} ~ {hosts[^1]}）；并发 {options.EffectiveConcurrency()}，" +
                     $"单主机超时 {options.EffectiveTimeoutMs()} ms；最坏情况预计约 " +
                     (seconds < 60 ? $"{seconds:F1} 秒" : $"{seconds / 60:F1} 分钟") +
-                    "\n说明：ARP 只在同一二层网段有效，路由之后拿不到 MAC；ICMP 无响应不等于设备离线。";
+                    "\n说明：ARP 只在同一二层网段有效，路由之后拿不到 MAC；ICMP 无响应不等于设备离线。" +
+                    (string.IsNullOrEmpty(_adapterHint) ? string.Empty : "\n" + _adapterHint);
     }
 
     [RelayCommand]
     private void UseLocalAdapter()
     {
-        var local = NetworkAdapters.Read().FirstOrDefault(a => a.PrimaryIpv4 != "-" && !a.IsLoopback);
+        var local = NetworkAdapters.PreferredAdapter();
         if (local is null)
         {
             _app.Dialogs.Warn("没有可用的本机地址", "未找到带 IPv4 地址的网络接口。");
@@ -136,6 +144,9 @@ public partial class LanScanViewModel : ObservableObject
         IpAddress = local.PrimaryIpv4;
         MaskText = local.PrimaryMask == "-" ? MaskText : local.PrimaryMask;
         RangeText = string.Empty;
+        _adapterHint = local.IsVirtual
+            ? "（注意：已选择的本机网卡看起来是虚拟/VPN 网卡）"
+            : string.Empty;
         UpdateHints();
     }
 

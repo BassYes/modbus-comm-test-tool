@@ -5,7 +5,8 @@
     <UseWPF>true</UseWPF>
     <RootNamespace>Comm.App.Wpf</RootNamespace>
     <AssemblyName>CommTestTool</AssemblyName>
-    <ApplicationIcon />
+    <!-- X-3：应用图标与完整版本资源（Company/Copyright/Version 在 Directory.Build.props） -->
+    <ApplicationIcon>app.ico</ApplicationIcon>
     <StartupObject>Comm.App.Wpf.App</StartupObject>
     <!-- 显式 asInvoker 清单：不触发 UAC，也不被“安装程序检测”误判 -->
     <ApplicationManifest>app.manifest</ApplicationManifest>

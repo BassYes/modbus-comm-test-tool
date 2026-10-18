@@ -143,7 +143,7 @@
                     <DataGridTextColumn Header="点位" Binding="{Binding Name}" Width="160" />
                     <DataGridTextColumn Header="地址" Binding="{Binding AddressText}" Width="130" />
                     <DataGridTextColumn Header="解析值" Binding="{Binding DisplayText}" Width="140" />
-                    <DataGridTextColumn Header="原始寄存器" Binding="{Binding RawHex}" Width="180" FontFamily="Consolas" />
+                    <DataGridTextColumn Header="原始寄存器" Binding="{Binding RawHex}" Width="180" FontFamily="{StaticResource MonoFont}" />
                     <DataGridTextColumn Header="状态" Binding="{Binding StatusText}" Width="80" />
                     <DataGridTextColumn Header="变化" Binding="{Binding ChangedText}" Width="70" />
                     <DataGridTextColumn Header="上次值" Binding="{Binding PreviousValue}" Width="110" />

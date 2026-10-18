@@ -162,38 +162,21 @@ public sealed class LogGate : IAsyncDisposable
 
     private static (string Directory, string? Warning) ResolveDirectory(string? configured)
     {
+        // R-21 X-2：日志目录保持规划 4.10 的“程序同级 logs”语义（带用户目录回退），
+        // 与数据目录策略共用同一个产品目录名，安装形态下两者都落到 %LOCALAPPDATA%。
         var candidates = new List<string>();
         if (!string.IsNullOrWhiteSpace(configured)) candidates.Add(configured!);
-        candidates.Add(Path.Combine(AppContext.BaseDirectory, "logs"));
+        candidates.Add(AppPaths.LogsDirectory);
         candidates.Add(Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "通讯测试工具", "logs"));
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppPaths.ProductFolderName, "logs"));
 
         foreach (var candidate in candidates)
         {
-            if (TryEnsureWritable(candidate)) return (candidate, null);
+            if (AppPaths.TryEnsureWritable(candidate)) return (candidate, null);
         }
 
         var fallback = Path.GetTempPath();
         return (fallback, "程序目录与用户数据目录均不可写，日志已回退到系统临时目录；请在设置中指定可写目录。");
-    }
-
-    private static bool TryEnsureWritable(string directory)
-    {
-        try
-        {
-            System.IO.Directory.CreateDirectory(directory);
-            var probe = Path.Combine(directory, $".write-probe-{Guid.NewGuid():N}.tmp");
-            using (var stream = new FileStream(probe, FileMode.Create, FileAccess.Write, FileShare.None))
-            {
-                stream.WriteByte(0);
-            }
-            File.Delete(probe);
-            return true;
-        }
-        catch (Exception)
-        {
-            return false;
-        }
     }
 
     public async ValueTask DisposeAsync()

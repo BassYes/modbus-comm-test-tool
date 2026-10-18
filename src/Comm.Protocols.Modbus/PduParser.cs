@@ -106,7 +106,11 @@ public static class PduParser
         if (d.Length < 4) return new ParsedPdu(PduKind.Unknown, pdu.Function, null, null, null, null, null, true);
         ushort addr = (ushort)((d[0] << 8) | d[1]);
         ushort qty = (ushort)((d[2] << 8) | d[3]);
-        return new ParsedPdu(PduKind.ReadRegisters, pdu.Function, addr, qty, null, null, null, true);
+
+        // M1 欠账 D-6：位区读请求（01/02）原先被标成 ReadRegisters，导致报文详情把
+        // “读线圈”请求显示成寄存器读。请求按功能码区分，响应才是按数据形态区分。
+        var kind = pdu.Function is Fn.ReadCoils or Fn.ReadDiscreteInputs ? PduKind.ReadBits : PduKind.ReadRegisters;
+        return new ParsedPdu(kind, pdu.Function, addr, qty, null, null, null, true);
     }
 
     private static ParsedPdu ParseReadBitsResponse(ModbusPdu pdu)

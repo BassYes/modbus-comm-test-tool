@@ -115,7 +115,7 @@
             <StackPanel Grid.Row="3">
                 <TextBlock Text="{Binding ValidationText}" Foreground="#1B5E9B" TextWrapping="Wrap" Margin="0,6,0,0" />
                 <TextBlock Text="{Binding PreviewText}" TextWrapping="Wrap" Margin="0,4,0,0" />
-                <TextBlock Text="{Binding MbapText}" TextWrapping="Wrap" Margin="0,4,0,0" FontFamily="Consolas"
+                <TextBlock Text="{Binding MbapText}" TextWrapping="Wrap" Margin="0,4,0,0" FontFamily="{StaticResource MonoFont}"
                            Foreground="#4A4A55" />
             </StackPanel>
 
@@ -143,13 +143,13 @@
             <Border Grid.Row="1" BorderBrush="{StaticResource BorderBrushLight}" BorderThickness="1" CornerRadius="3"
                     Background="White" Padding="6" Margin="0,0,0,8">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <TextBlock Text="{Binding ResponseText}" TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" />
+                    <TextBlock Text="{Binding ResponseText}" TextWrapping="Wrap" FontFamily="{StaticResource MonoFont}" FontSize="12" />
                 </ScrollViewer>
             </Border>
 
             <TextBlock Grid.Row="2" Text="历史（双击可载入报文）" Style="{StaticResource SectionHeader}" />
             <Grid Grid.Row="3">
-                <ListBox ItemsSource="{Binding History}" FontFamily="Consolas" FontSize="12">
+                <ListBox ItemsSource="{Binding History}" FontFamily="{StaticResource MonoFont}" FontSize="12">
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
                             <Setter Property="Padding" Value="2" />

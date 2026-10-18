@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
-  <assemblyIdentity version="0.1.0.0" name="CommTestTool.app" />
+  <assemblyIdentity version="0.2.5.0" name="CommTestTool.app" />
 
   <!-- 关键：声明 asInvoker，永不触发 UAC 提权框。
        同时显式声明，避免被 Windows 的“安装程序检测”启发式当成安装包而要求提权。 -->
@@ -15,12 +15,9 @@
   <!-- 声明支持 Windows 10/11，可提升兼容性和安全性检查通过率 -->
   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
     <application>
-      <!-- Windows 10 / Windows 11 -->
+      <!-- X-10 范围决策：默认支持 Windows 10 21H2+ / Windows 11 x64（.NET 8 不支持 Win7/8.1）。
+           此处只声明真正支持的版本，避免给用户错误暗示。 -->
       <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" />
-      <!-- Windows 8.1 -->
-      <supportedOS Id="{1f676c76-80e1-4239-95bb-83d0f6d0da78}" />
-      <!-- Windows 8 -->
-      <supportedOS Id="{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}" />
     </application>
   </compatibility>
 

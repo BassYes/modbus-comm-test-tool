@@ -139,8 +139,8 @@ public sealed class CrashReporter : IDisposable
         }
     }
 
-    /// <summary>上次是否异常退出（运行标志文件，见规划 15.9）。</summary>
-    public static string RunningFlagPath => Path.Combine(AppContext.BaseDirectory, "data", ".running");
+    /// <summary>上次是否异常退出（运行标志文件，见规划 15.9）。R-21：与设置同一数据目录，可写时不会因 Program Files 而失效。</summary>
+    public static string RunningFlagPath => Path.Combine(AppPaths.DataDirectory, ".running");
 
     public static void MarkRunning()
     {

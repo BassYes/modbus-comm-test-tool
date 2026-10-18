@@ -33,11 +33,13 @@ public partial class App : Application
         }
         CrashReporter.MarkRunning();
         logGate.Info("App", $"程序启动。{AppInfo.Summary()}");
+        logGate.Info("App", $"数据目录：{AppPaths.ToDisplayText()}");
+        if (!string.IsNullOrEmpty(AppPaths.Info.FallbackReason)) logGate.Warning("App", AppPaths.Info.FallbackReason);
         if (!string.IsNullOrEmpty(settingsWarning)) logGate.Warning("App", settingsWarning);
         if (!string.IsNullOrEmpty(logGate.DirectoryWarning)) logGate.Warning("App", logGate.DirectoryWarning);
 
-        // 报文总线（显示缓冲 + 落盘）
-        var captureDirectory = settings.LastCaptureDirectory ?? System.IO.Path.Combine(AppContext.BaseDirectory, "data", "captures");
+        // 报文总线（显示缓冲 + 落盘）。R-21 X-2：落盘目录跟随 AppPaths 的数据目录。
+        var captureDirectory = settings.LastCaptureDirectory ?? AppPaths.CapturesDirectory;
         var writer = new FrameFileWriter(maxFileSizeMb: 64);
         var frameBus = new FrameBus(settings.Monitor.DisplayCapacity, writer);
 

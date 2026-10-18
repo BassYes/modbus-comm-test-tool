@@ -11,6 +11,10 @@
     <SolidColorBrush x:Key="PanelBrush" Color="#F7F7F9" />
     <SolidColorBrush x:Key="BorderBrushLight" Color="#D6D6DC" />
 
+    <!-- R-21 X-4：字体回退链（小屏工控机 / 缺少雅黑或 Consolas 的环境） -->
+    <FontFamily x:Key="UiFont">Microsoft YaHei UI, Segoe UI, SimSun</FontFamily>
+    <FontFamily x:Key="MonoFont">Consolas, Cascadia Mono, Courier New</FontFamily>
+
     <conv:DirectionToBrushConverter x:Key="DirectionToBrush" />
     <conv:DirectionBrushToggleConverter x:Key="DirectionBrushToggle" />
     <conv:StatusToBrushConverter x:Key="StatusToBrush" />

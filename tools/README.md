@@ -113,3 +113,32 @@ signtool verify /pa /v CommTestTool.exe
 - [ ] `Get-Item x.exe -Stream Zone.Identifier` 无输出
 - [ ] 从 zip 解压到干净目录后，双击运行不弹框（把整条链路走一遍）
 - [ ] 文件名不含 `setup`/`install`/`update`/`patch` 等关键字
+
+---
+
+## 七、本目录脚本一览（M2.5 更新）
+
+| 脚本 | 用途 | 备注 |
+|---|---|---|
+| `Publish-App.ps1` | 发布产物：`dotnet publish` → 清 MOTW →（可选）签名 →（可选）打 zip | **默认 Release + 自包含 win-x64**；`-FrameworkDependent` 出小包；`-Sign` 会对本项目 11 个自有 exe/dll 全部签名；自动附带 `便携包说明.txt` 与 `解除锁定-便携包.ps1` |
+| `Sign-App.ps1` | Authenticode 签名（SHA-256 + RFC3161 时间戳） | 不指定 `-Thumbprint` 时自动取当前用户“我的”里有效期最长的代码签名证书 |
+| `New-DevCodeSigningCert.ps1` | 创建开发自签名证书并装入受信任存储 | 仅本机/域内有效；`-PfxPath` 可导出 PFX（**切勿提交进仓库**） |
+| `New-AppIcon.ps1` | 生成 `src\Comm.App.Wpf\app.ico`（16/24/32/48/64/128/256） | 已有设计稿时直接替换 `app.ico`，不要再运行 |
+| `Unblock-Build.ps1` | 清除 MOTW（等价于“属性 → 解除锁定”） | 只对本机有效；对外分发请用签名 |
+| `Invoke-HilProbe.ps1` | 真实硬件回归：调 `tools\Comm.HilProbe` 遍历波特率/校验位 | 只发 `03` 只读请求；报告回填 `docs\hardware-compatibility-matrix-v1.md` |
+
+### 发布与签名（M2.5 / R-20）
+
+```powershell
+# 仅发布（默认自包含）
+.\Publish-App.ps1
+
+# 发布 + 签名 + 便携包
+.\Publish-App.ps1 -Sign -Zip -TimestampServer http://timestamp.digicert.com
+
+# 真实硬件回归
+.\Invoke-HilProbe.ps1 -Port COM5 -Unit 5 -Baud 9600,19200 -Parity N,E
+```
+
+> `param()` 默认值里 `$PSScriptRoot` 在部分调用方式下为空，因此 `-OutputPath` 类参数的默认值
+> 在脚本正文中解析（脚本已处理，无需手工传参）。

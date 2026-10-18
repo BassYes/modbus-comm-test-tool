@@ -198,7 +198,7 @@
                     <DataGridTextColumn Header="类型" Binding="{Binding Type}" Width="80" />
                     <DataGridTextColumn Header="字节序" Binding="{Binding Order}" Width="70" />
                     <DataGridTextColumn Header="缩放" Binding="{Binding Scale}" Width="60" />
-                    <DataGridTextColumn Header="原始寄存器" Binding="{Binding RawHex}" Width="180" FontFamily="Consolas" />
+                    <DataGridTextColumn Header="原始寄存器" Binding="{Binding RawHex}" Width="180" FontFamily="{StaticResource MonoFont}" />
                     <DataGridTextColumn Header="解析值" Binding="{Binding ValueText}" Width="140" />
                     <DataGridTextColumn Header="匹配值" Binding="{Binding MatchedValue}" Width="100" />
                     <DataGridTextColumn Header="分数" Binding="{Binding MatchScore}" Width="60" />

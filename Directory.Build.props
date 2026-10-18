@@ -1,15 +1,47 @@
 <Project>
+
+  <!--
+    X-9：版本号与构建信息的唯一来源。
+    版本号只在这里改；界面“关于/设置”页与 EXE 文件属性都从这里取值，避免出现
+    “交付名叫 v0.2、程序里写着 0.1.0”这类不一致（规划 22.1.2 F-7）。
+    提交号直接从 .git 读取，不依赖 SourceLink（本项目为本地私有库）。
+  -->
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <LangVersion>12.0</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <NeutralLanguage>zh-CN</NeutralLanguage>
-    <Version>0.1.0</Version>
+
+    <Version>0.2.5</Version>
+    <AssemblyVersion>0.2.5.0</AssemblyVersion>
+    <FileVersion>0.2.5.0</FileVersion>
     <Product>通讯测试工具</Product>
+    <Company>通讯测试工具项目组</Company>
+    <Copyright>Copyright © 2026 通讯测试工具项目组</Copyright>
+    <Description>电力工业现场 Modbus RTU / TCP 通讯测试工具</Description>
+
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
+
+  <!-- 构建时间与提交号（写入程序集元数据，供 AppInfo 读取） -->
+  <PropertyGroup>
+    <BuildTimeUtc>$([System.DateTime]::UtcNow.ToString("yyyy-MM-dd HH:mm:ss"))Z</BuildTimeUtc>
+
+    <GitHeadRaw Condition="Exists('$(MSBuildThisFileDirectory).git\HEAD')">$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory).git\HEAD').Trim())</GitHeadRaw>
+    <GitHeadRef Condition="$(GitHeadRaw.StartsWith('ref: '))">$(GitHeadRaw.Substring(5))</GitHeadRef>
+    <GitHeadFull Condition="'$(GitHeadRef)' != '' And Exists('$(MSBuildThisFileDirectory).git\$(GitHeadRef)')">$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory).git\$(GitHeadRef)').Trim())</GitHeadFull>
+    <GitHeadFull Condition="$(GitHeadRaw.StartsWith('ref: ')) != true And '$(GitHeadRaw)' != ''">$(GitHeadRaw)</GitHeadFull>
+    <GitHead Condition="'$(GitHeadFull)' != ''">$([System.String]::Copy('$(GitHeadFull)').Substring(0, 7))</GitHead>
+    <GitHead Condition="'$(GitHead)' == ''">unknown</GitHead>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="BuildTimeUtc" Value="$(BuildTimeUtc)" />
+    <AssemblyMetadata Include="SourceRevisionId" Value="$(GitHead)" />
+    <AssemblyMetadata Include="ProductVersion" Value="$(Version)" />
+  </ItemGroup>
 
   <PropertyGroup Condition="'$(IsTestProject)' == 'true'">
     <IsPackable>false</IsPackable>

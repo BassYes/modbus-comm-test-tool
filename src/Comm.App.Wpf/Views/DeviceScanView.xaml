@@ -1,6 +1,8 @@
 <UserControl x:Class="Comm.App.Wpf.Views.DeviceScanView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- B-01（规划 22.4）：左侧参数面板外层加 ScrollViewer，开始/暂停/停止按钮与预计耗时固定在面板顶部；
+         说明 / 结果操作 / 扫描方案 改为可折叠分组，保证 900×480 与高 DPI 下所有内容均可到达。 -->
     <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -8,111 +10,211 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="330" />
-            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="330" MinWidth="260" />
+            <ColumnDefinition Width="*" MinWidth="320" />
         </Grid.ColumnDefinitions>
 
         <!-- 参数 -->
         <Border Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" BorderBrush="{StaticResource BorderBrushLight}"
                 BorderThickness="1" CornerRadius="3" Padding="12" Margin="0,0,12,0" Background="{StaticResource PanelBrush}">
-            <StackPanel>
-                <TextBlock Text="扫描参数" Style="{StaticResource SectionHeader}" />
+            <DockPanel>
+                <!-- 固定区：不随滚动消失（规划 22.4 第 1 点） -->
+                <StackPanel DockPanel.Dock="Top">
+                    <TextBlock Text="扫描参数" Style="{StaticResource SectionHeader}" />
 
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0">
-                        <TextBlock Text="起始地址" Style="{StaticResource FieldLabel}" />
-                        <TextBox Text="{Binding StartAddress}" />
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <Button Content="开始扫描" Command="{Binding StartCommand}" FontWeight="SemiBold"
+                                IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBool}}" />
+                        <Button Content="暂停/继续" Command="{Binding PauseResumeCommand}" IsEnabled="{Binding IsRunning}" />
                     </StackPanel>
-                    <StackPanel Grid.Column="1">
-                        <TextBlock Text="结束地址" Style="{StaticResource FieldLabel}" />
-                        <TextBox Text="{Binding EndAddress}" />
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="停止" Command="{Binding StopCommand}" IsEnabled="{Binding IsRunning}" />
+                        <Button Content="清空" Command="{Binding ClearCommand}" />
+                        <Button Content="导出 CSV" Command="{Binding ExportCommand}" />
                     </StackPanel>
-                </Grid>
 
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0">
-                        <TextBlock Text="超时 ms" Style="{StaticResource FieldLabel}" />
-                        <TextBox Text="{Binding ResponseTimeoutMs}" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="1">
-                        <TextBlock Text="重试" Style="{StaticResource FieldLabel}" />
-                        <TextBox Text="{Binding RetryCount}" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="2">
-                        <TextBlock Text="间隔 ms" Style="{StaticResource FieldLabel}" />
-                        <TextBox Text="{Binding IntervalMs}" />
-                    </StackPanel>
-                </Grid>
+                    <TextBlock Text="{Binding EstimatedText}" TextWrapping="Wrap" Foreground="#4A4A55" Margin="0,8,0,4" />
+                    <TextBlock Text="{Binding ConnectionContextText}" TextWrapping="Wrap" Foreground="#1B5E9B" Margin="0,0,0,8" />
+                    <Separator Margin="0,0,0,8" />
+                </StackPanel>
 
-                <TextBlock Text="探测方式" Style="{StaticResource FieldLabel}" />
-                <ComboBox ItemsSource="{Binding ModeOptions}" DisplayMemberPath="Display"
-                          SelectedValuePath="Value" SelectedValue="{Binding ProbeMode}" />
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="起始地址" Style="{StaticResource FieldLabel}" />
+                                <TextBox Text="{Binding StartAddress}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="结束地址" Style="{StaticResource FieldLabel}" />
+                                <TextBox Text="{Binding EndAddress}" />
+                            </StackPanel>
+                        </Grid>
 
-                <!-- R-17：手动探测（只有只读功能码可选） -->
-                <StackPanel IsEnabled="{Binding IsManualMode}">
-                    <ComboBox ItemsSource="{Binding ProbeFunctionOptions}" DisplayMemberPath="Display"
-                              SelectedValuePath="Value" SelectedValue="{Binding ManualProbeFunction}"
-                              ToolTip="扫描任务只能使用只读功能码" />
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0">
-                            <TextBlock Text="探测起始地址" Style="{StaticResource FieldLabel}" />
-                            <TextBox Text="{Binding ManualProbeAddress}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="超时 ms" Style="{StaticResource FieldLabel}" />
+                                <TextBox Text="{Binding ResponseTimeoutMs}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="重试" Style="{StaticResource FieldLabel}" />
+                                <TextBox Text="{Binding RetryCount}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="间隔 ms" Style="{StaticResource FieldLabel}" />
+                                <TextBox Text="{Binding IntervalMs}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- R-11：串口参数（位于“扫描范围”之后、“探测方式”之前，规划 22.3.2） -->
+                        <TextBlock Text="串口参数（R-11）" Style="{StaticResource SectionHeader}" />
+                        <TextBlock Text="波特率" Style="{StaticResource FieldLabel}" />
+                        <ComboBox ItemsSource="{Binding ParameterSourceOptions}" DisplayMemberPath="Display"
+                                  SelectedValuePath="Value" SelectedValue="{Binding BaudRateSource}" />
+
+                        <StackPanel Visibility="{Binding ShowSpecifiedBaudRate, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="指定波特率" Style="{StaticResource FieldLabel}" />
+                            <ComboBox ItemsSource="{Binding BaudRateOptions}" SelectedItem="{Binding SpecifiedBaudRate}" />
                         </StackPanel>
-                        <StackPanel Grid.Column="1">
-                            <TextBlock Text="探测数量" Style="{StaticResource FieldLabel}" />
-                            <TextBox Text="{Binding ManualProbeQuantity}" />
+
+                        <TextBlock Text="校验位" Style="{StaticResource FieldLabel}" />
+                        <ComboBox ItemsSource="{Binding ParameterSourceOptions}" DisplayMemberPath="Display"
+                                  SelectedValuePath="Value" SelectedValue="{Binding ParitySource}" />
+
+                        <StackPanel Visibility="{Binding ShowSpecifiedParity, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="指定校验位" Style="{StaticResource FieldLabel}" />
+                            <ComboBox ItemsSource="{Binding ParityOptions}" DisplayMemberPath="Display"
+                                      SelectedValuePath="Value" SelectedValue="{Binding SpecifiedParity}" />
                         </StackPanel>
-                    </Grid>
-                </StackPanel>
 
-                <CheckBox IsChecked="{Binding ConfirmFound}" Content="发现后二次确认" />
-                <CheckBox IsChecked="{Binding TryDeviceIdentification}">
-                    <TextBlock TextWrapping="Wrap" Text="尝试读取设备标识（43/14）" ToolTip="可得到厂商与型号" />
-                </CheckBox>
+                        <StackPanel Visibility="{Binding ShowBaudCandidates, Converter={StaticResource BoolToVisibility}}">
+                            <TextBlock Text="候选波特率（仅“未知”时可见）" Style="{StaticResource FieldLabel}" />
+                            <ItemsControl ItemsSource="{Binding CandidateBauds}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <CheckBox IsChecked="{Binding IsSelected}" Content="{Binding Text}" Margin="0,0,10,0" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <CheckBox IsChecked="{Binding CommonFirst}" Content="常用优先（9600/19200 等先试）" />
+                        </StackPanel>
 
-                <TextBlock Text="{Binding EstimatedText}" TextWrapping="Wrap" Foreground="#4A4A55" Margin="0,6,0,10" />
+                        <Expander Header="高级（停止位策略 / 探测地址 / 稳定等待）" IsExpanded="{Binding ParameterScanAdvancedExpanded}">
+                            <StackPanel>
+                                <TextBlock Text="停止位策略" Style="{StaticResource FieldLabel}" />
+                                <ComboBox ItemsSource="{Binding StopBitsOptions}" DisplayMemberPath="Display"
+                                          SelectedValuePath="Value" SelectedValue="{Binding StopBitsStrategy}" />
+                                <TextBlock Text="阶段 A 探测地址（如 1-10,247；留空用默认）" Style="{StaticResource FieldLabel}" />
+                                <TextBox Text="{Binding KnownAddressesText}" ToolTip="只发一次只读探测的地址，命中后才会扫完整地址段" />
+                                <CheckBox IsChecked="{Binding ContinueAfterHit}" Content="命中后继续尝试其他组合" />
+                                <TextBlock Text="参数更换稳定等待 ms（USB 转串口建议 100~500）" Style="{StaticResource FieldLabel}" />
+                                <TextBox Text="{Binding ReconfigureSettleMs}" />
+                                <TextBlock Text="命中后确认次数（2 = 首探 + 2 次确认 = 3/3）" Style="{StaticResource FieldLabel}" />
+                                <TextBox Text="{Binding ConfirmAttempts}" />
+                            </StackPanel>
+                        </Expander>
 
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                    <Button Content="开始扫描" Command="{Binding StartCommand}" FontWeight="SemiBold"
-                            IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBool}}" />
-                    <Button Content="暂停/继续" Command="{Binding PauseResumeCommand}" IsEnabled="{Binding IsRunning}" />
-                </StackPanel>
-                <StackPanel Orientation="Horizontal">
-                    <Button Content="停止" Command="{Binding StopCommand}" IsEnabled="{Binding IsRunning}" />
-                    <Button Content="清空" Command="{Binding ClearCommand}" />
-                    <Button Content="导出 CSV" Command="{Binding ExportCommand}" />
-                </StackPanel>
+                        <TextBlock Text="探测方式" Style="{StaticResource FieldLabel}" />
+                        <ComboBox ItemsSource="{Binding ModeOptions}" DisplayMemberPath="Display"
+                                  SelectedValuePath="Value" SelectedValue="{Binding ProbeMode}" />
 
-                <TextBlock Text="结果操作" Style="{StaticResource SectionHeader}" />
-                <Button Content="将选中地址设为 Unit ID" Command="{Binding UseAsTargetCommand}" HorizontalAlignment="Left" />
-                <Button Content="把选中地址加入监视表" Command="{Binding AddToWatchCommand}" HorizontalAlignment="Left" Margin="0,6,0,0" />
+                        <!-- R-17：手动探测（只有只读功能码可选） -->
+                        <StackPanel IsEnabled="{Binding IsManualMode}">
+                            <ComboBox ItemsSource="{Binding ProbeFunctionOptions}" DisplayMemberPath="Display"
+                                      SelectedValuePath="Value" SelectedValue="{Binding ManualProbeFunction}"
+                                      ToolTip="扫描任务只能使用只读功能码" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="探测起始地址" Style="{StaticResource FieldLabel}" />
+                                    <TextBox Text="{Binding ManualProbeAddress}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="探测数量" Style="{StaticResource FieldLabel}" />
+                                    <TextBox Text="{Binding ManualProbeQuantity}" />
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
 
-                <TextBlock Text="扫描方案" Style="{StaticResource SectionHeader}" />
-                <ComboBox ItemsSource="{Binding Plans}" DisplayMemberPath="DisplayText" SelectedItem="{Binding SelectedPlan}" />
-                <StackPanel Orientation="Horizontal">
-                    <Button Content="载入方案" Command="{Binding LoadPlanCommand}" />
-                    <Button Content="删除方案" Command="{Binding DeletePlanCommand}" />
-                </StackPanel>
-                <TextBox Text="{Binding PlanName}" ToolTip="方案名称（可空，使用地址范围作为名称）" />
-                <Button Content="保存当前参数为方案" Command="{Binding SavePlanCommand}" HorizontalAlignment="Left" />
+                        <CheckBox IsChecked="{Binding ConfirmFound}" Content="发现后二次确认" />
+                        <CheckBox IsChecked="{Binding TryDeviceIdentification}">
+                            <TextBlock TextWrapping="Wrap" Text="尝试读取设备标识（43/14）" ToolTip="可得到厂商与型号" />
+                        </CheckBox>
 
-                <TextBlock Text="说明" Style="{StaticResource SectionHeader}" />
-                <TextBlock TextWrapping="Wrap" Foreground="#4A4A55"
-                           Text="自动模板：探测顺序 03 → 04 → 01 → 02，起始地址 0、数量 1。&#10;手动探测：只允许只读功能码 01/02/03/04，起始地址与数量由用户指定。&#10;合法异常响应也判定设备在线（地址未实现但设备存在）。&#10;扫描绝不使用写功能码，也绝不使用广播地址 0。" />
-            </StackPanel>
+                        <!-- 结果操作（折叠，降低面板常态高度） -->
+                        <Expander Header="结果操作" Margin="0,8,0,0">
+                            <StackPanel>
+                                <Button Content="将选中地址设为 Unit ID" Command="{Binding UseAsTargetCommand}"
+                                        HorizontalAlignment="Left" />
+                                <Button Content="应用到连接中心（R-11）" Command="{Binding ApplyToConnectionCenterCommand}"
+                                        HorizontalAlignment="Left" Margin="0,6,0,0"
+                                        IsEnabled="{Binding CanApplyToConnectionCenter}"
+                                        ToolTip="把选中结果的波特率/校验/停止位回填到连接中心，可选择立即重连" />
+                                <Button Content="把选中地址加入监视表" Command="{Binding AddToWatchCommand}"
+                                        HorizontalAlignment="Left" Margin="0,6,0,0" />
+                            </StackPanel>
+                        </Expander>
+
+                        <!-- 扫描方案（折叠） -->
+                        <Expander Header="扫描方案" Margin="0,8,0,0">
+                            <StackPanel>
+                                <ComboBox ItemsSource="{Binding Plans}" DisplayMemberPath="DisplayText"
+                                          SelectedItem="{Binding SelectedPlan}" />
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="载入方案" Command="{Binding LoadPlanCommand}" />
+                                    <Button Content="删除方案" Command="{Binding DeletePlanCommand}" />
+                                </StackPanel>
+                                <TextBox Text="{Binding PlanName}" ToolTip="方案名称（可空，使用地址范围作为名称）" />
+                                <Button Content="保存当前参数为方案" Command="{Binding SavePlanCommand}" HorizontalAlignment="Left" />
+                            </StackPanel>
+                        </Expander>
+
+                        <!-- R-11 分组结果 -->
+                        <Expander Header="参数扫描分组结果" Margin="0,8,0,0" IsExpanded="True">
+                            <ItemsControl ItemsSource="{Binding ParameterGroups}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border BorderBrush="{StaticResource BorderBrushLight}" BorderThickness="0,0,0,1"
+                                                Padding="0,4">
+                                            <StackPanel>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding Combination.Text}" FontWeight="SemiBold" />
+                                                    <TextBlock Text="推荐" Foreground="#1E7B34" FontWeight="SemiBold"
+                                                               Visibility="{Binding Recommended, Converter={StaticResource BoolToVisibility}}" />
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding Note}" TextWrapping="Wrap" Foreground="#4A4A55" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Expander>
+
+                        <!-- 说明（折叠，默认展开；规划 22.4 第 2 点） -->
+                        <Expander Header="说明" Margin="0,8,0,0" IsExpanded="True">
+                            <TextBlock TextWrapping="Wrap" Foreground="#4A4A55"
+                                       Text="自动模板：探测顺序 03 → 04 → 01 → 02，起始地址 0、数量 1。&#10;手动探测：只允许只读功能码 01/02/03/04，起始地址与数量由用户指定。&#10;合法异常响应也判定设备在线（地址未实现但设备存在）。&#10;扫描绝不使用写功能码，也绝不使用广播地址 0。&#10;&#10;R-11 未知参数扫描：波特率或校验位选“未知”后，程序先对每个组合在少量地址上发一次只读探测（阶段 A），命中后在该组合上扫描完整地址段（阶段 B），并用 3/3 确认区分“在线/疑似”。&#10;扫描期间会以不同波特率在总线上发送只读请求，扫描结束后必定恢复原来的串口参数；多个组合同时命中时只给出“推荐”，最终以设备手册为准。" />
+                        </Expander>
+                    </StackPanel>
+                </ScrollViewer>
+            </DockPanel>
         </Border>
 
         <!-- 进度 -->
@@ -131,10 +233,14 @@
             <CheckBox IsChecked="{Binding OnlyOnline}" Content="只显示在线/疑似" />
         </StackPanel>
 
-        <!-- 结果 -->
+        <!-- 结果：R-11 新增 波特率 / 校验 / 停止位 / 推荐 列 -->
         <DataGrid Grid.Row="2" Grid.Column="1" ItemsSource="{Binding ItemsView}" SelectedItem="{Binding SelectedItem}">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="从站地址" Binding="{Binding Address}" Width="80" />
+                <DataGridTextColumn Header="波特率" Binding="{Binding BaudRateText}" Width="70" />
+                <DataGridTextColumn Header="校验" Binding="{Binding ParityText}" Width="50" />
+                <DataGridTextColumn Header="停止位" Binding="{Binding StopBitsText}" Width="60" />
+                <DataGridTextColumn Header="推荐" Binding="{Binding RecommendationText}" Width="50" />
                 <DataGridTextColumn Header="状态" Binding="{Binding StatusText}" Width="70" />
                 <DataGridTextColumn Header="首次发现" Binding="{Binding FirstSeen, StringFormat=HH:mm:ss.fff}" Width="100" />
                 <DataGridTextColumn Header="最近响应" Binding="{Binding LastSeen, StringFormat=HH:mm:ss.fff}" Width="100" />

@@ -42,6 +42,32 @@ public partial class ConnectionViewModel : ObservableObject
         RefreshTargets();
         UpdateStatus();
         app.Sessions.CurrentChanged += (_, _) => UpdateStatus();
+
+        // R-11：设备扫描的“应用到连接中心”通过事件回填串口参数（并可选择立即重连）。
+        app.SerialParametersRequested += (_, request) => _ = ApplySerialParametersAsync(request);
+    }
+
+    /// <summary>把参数扫描得到的串口参数回填到界面，必要时立即重连。</summary>
+    private async Task ApplySerialParametersAsync(ApplySerialParametersRequest request)
+    {
+        try
+        {
+            BaudRate = request.Combination.BaudRate;
+            DataBits = 8;
+            Parity = request.Combination.Parity;
+            StopBits = request.Combination.StopBits;
+            UpdateStatus();
+            Message = $"已应用串口参数 {request.Combination.Text}。";
+
+            if (request.Reconnect)
+            {
+                await ConnectSerialAsync().ConfigureAwait(true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Message = $"应用串口参数失败：{ex.Message}";
+        }
     }
 
     public ObservableCollection<string> Ports { get; } = new();

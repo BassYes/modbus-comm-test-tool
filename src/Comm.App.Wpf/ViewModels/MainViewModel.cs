@@ -111,6 +111,12 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string _versionText = AppInfo.Summary();
 
+    /// <summary>窗口标题（X-9：版本号单一来源，不再写死在 XAML 里）。</summary>
+    public string VersionTitle => AppInfo.Title;
+
+    /// <summary>“关于”行：版本 + 提交号 + 构建时间。</summary>
+    public string AboutText => AppInfo.FullVersionText;
+
     partial void OnSelectedNavChanged(NavItem? value)
     {
         OnPropertyChanged(nameof(CurrentPage));

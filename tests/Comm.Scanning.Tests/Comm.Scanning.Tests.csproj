@@ -15,6 +15,7 @@
     <ProjectReference Include="..\..\src\Comm.Scanning\Comm.Scanning.csproj" />
     <ProjectReference Include="..\..\src\Comm.Session\Comm.Session.csproj" />
     <ProjectReference Include="..\..\src\Comm.Transport\Comm.Transport.csproj" />
+    <ProjectReference Include="..\..\src\Comm.Settings\Comm.Settings.csproj" />
     <ProjectReference Include="..\Comm.TestSupport\Comm.TestSupport.csproj" />
   </ItemGroup>
 </Project>

@@ -3,10 +3,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:Comm.App.Wpf.ViewModels"
         xmlns:views="clr-namespace:Comm.App.Wpf.Views"
-        Title="通讯测试工具 v0.1 — Modbus RTU / TCP 现场测试"
-        Height="780" Width="1180" MinWidth="1020" MinHeight="640"
+        Title="{Binding VersionTitle}"
+        Height="780" Width="1180" MinWidth="900" MinHeight="480"
         WindowStartupLocation="CenterScreen" WindowState="Maximized"
-        FontFamily="Microsoft YaHei UI" FontSize="13">
+        FontFamily="{StaticResource UiFont}" FontSize="13">
 
     <Window.Resources>
         <DataTemplate DataType="{x:Type vm:ConnectionViewModel}">
