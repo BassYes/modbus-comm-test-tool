@@ -1,6 +1,6 @@
 namespace Comm.App.Wpf.Services.Update;
 
-/// <summary>客户端更新清单（与 docs/samples/update-manifest.example.json 对应）。</summary>
+/// <summary>客户端更新清单（字段与签名流程对应，示例由发布流水线生成）。</summary>
 public sealed record UpdateManifest(
     int Schema,
     string Product,
