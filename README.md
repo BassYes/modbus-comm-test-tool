@@ -84,7 +84,7 @@
 程序目前**未做代码签名**。从网盘/微信/邮件拿到的 exe 会带“来自 Internet”标记，Windows 因此提示。三种处理：
 1. 用**安装包**安装：安装器写出的文件不带该标记，装完启动不再提示；
 2. 便携包：右键 zip → 属性 → 勾选“解除锁定”后再解压（或解压后运行包内 `解除锁定-便携包.ps1`）；
-3. 彻底解决需要正式代码签名证书，选型见 [代码签名计划](docs/code-signing-plan.md)。
+3. 彻底解决需要一张可信的代码签名证书（OV/EV 或云端签名服务），签名后提示会变成“已验证的发布者”，并随下载量累积信誉。
 
 **Q：双击安装包没弹 UAC，正常吗？**
 正常。v0.4.2 起安装包是当前用户安装（`lowest` 权限），本来就不提权。
@@ -116,13 +116,15 @@
 
 ## 8. 给开发者
 
+公开仓库只放**运行与构建相关**的内容：源码、测试、构建/发布脚本、安装包脚本、用户手册与截图。
+内部工作记录（里程碑交付说明、审计与验收记录、探针报告等）不在仓库内。
+
 | 内容 | 位置 |
 |---|---|
-| 构建环境与常见构建问题 | [docs/build-environment.md](docs/build-environment.md) |
-| 安装包脚本（Inno Setup）与 per-user 方案 | [tools/installer.iss](tools/installer.iss)、[docs/per-user-install-plan.md](docs/per-user-install-plan.md) |
-| 发布与更新清单签名 | `.github/workflows/release.yml`、`tools/Generate-UpdateManifest.ps1` |
-| 签名相关 | [docs/code-signing-plan.md](docs/code-signing-plan.md)、`tools/Sign-App.ps1` |
-| 安全回归与验收 | [docs/security-regression.md](docs/security-regression.md)、[docs/v1.0-验收清单.md](docs/v1.0-验收清单.md) |
+| 安装包脚本（Inno Setup，当前用户安装） | [tools/installer.iss](tools/installer.iss) |
+| 发布流水线与更新清单签名 | `.github/workflows/release.yml`、`tools/Generate-UpdateManifest.ps1` |
+| 签名脚本（自签名 / pfx / 时间戳） | `tools/Sign-App.ps1`、`tools/New-DevCodeSigningCert.ps1` |
+| 发布与打包 | `tools/Publish-App.ps1`、`tools/Build-Installer.ps1` |
 
 常用命令（需要 .NET SDK 8）：
 

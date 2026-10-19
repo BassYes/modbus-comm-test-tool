@@ -163,7 +163,7 @@ public sealed class LogGate : IAsyncDisposable
     private static (string Directory, string? Warning) ResolveDirectory(string? configured)
     {
         // 候选链：用户指定 > AppPaths.LogsDirectory（已按形态解析：安装形态→用户目录，便携→程序同级）> 用户目录 > temp。
-        // 见 docs/per-user-install-plan.md：安装形态下 logs 不再落到程序目录，卸载不会误删。
+        // 见 内部文档：安装形态下 logs 不再落到程序目录，卸载不会误删。
         var candidates = new List<string>();
         if (!string.IsNullOrWhiteSpace(configured)) candidates.Add(configured!);
         candidates.Add(AppPaths.LogsDirectory);

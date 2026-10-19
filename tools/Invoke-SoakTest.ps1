@@ -143,7 +143,7 @@ $lines += '- 无未观察异常、无崩溃报告（`logs\crash-*.log` 不新增
 $lines += ''
 $lines += '> 说明：本脚本覆盖“长时间连续收发 + 落盘 + 显示缓冲”的软件路径。'
 $lines += '> 现场 24 h 结论还需要在接真实硬件（USB-RS485 + 从站）的机器上运行，'
-$lines += '> 并把 jitter/回显/断线重连等观察结果回填 `docs\hardware-compatibility-matrix-v1.md`。'
+$lines += '> 并把 jitter/回显/断线重连等观察结果回填 `内部文档`。'
 
 Set-Content -LiteralPath $OutputPath -Value ($lines -join "`r`n") -Encoding UTF8
 

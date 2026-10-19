@@ -6,7 +6,7 @@
     在接好 USB-RS485 适配器与已知从站之后运行本脚本：
       1. 罗列当前串口；
       2. 按给定组合遍历波特率/校验位，发送只读请求并记录回显、拆帧与字节间隔；
-      3. 输出报告文件，内容可直接回填 docs\hardware-compatibility-matrix-v1.md。
+      3. 输出报告文件，内容可直接回填 内部文档。
 
     探针程序是 tools\Comm.HilProbe（只读、只发 03 读保持寄存器，不做任何写操作）。
 
@@ -87,4 +87,4 @@ if ($LASTEXITCODE -ne 0) { throw "探针执行失败（退出码 $LASTEXITCODE�
 
 Write-Host ""
 Write-Host "请把报告中的“结论：可用/不可用”、回显情况与最大字节间隔回填到：" -ForegroundColor Green
-Write-Host "  docs\hardware-compatibility-matrix-v1.md"
+Write-Host "  内部文档"

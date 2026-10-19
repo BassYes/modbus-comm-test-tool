@@ -1,7 +1,7 @@
 namespace Comm.Diagnostics;
 
 /// <summary>
-/// 目录解析（规划 12.7、22.6.2 的 X-2 / D-13；per-user 安装见 docs/per-user-install-plan.md）。
+/// 目录解析（规划 12.7、22.6.2 的 X-2 / D-13；per-user 安装见 内部文档）。
 /// <para>
 /// 原则：**显式声明 &gt; 安装形态 &gt; 可写性回退**。
 /// 1. <c>portable.flag</c> 存在且可写 → 程序同级 <c>data/</c>（显式便携，最高优先）；
@@ -16,7 +16,7 @@ public static class AppPaths
 {
     public const string PortableFlagName = "portable.flag";
 
-    /// <summary>安装标记文件（由安装包写入，见 docs/per-user-install-plan.md）。</summary>
+    /// <summary>安装标记文件（由安装包写入，见 内部文档）。</summary>
     public const string InstallFlagName = "install.flag";
 
     public const string ProductFolderName = "通讯测试工具";
@@ -338,7 +338,7 @@ public static class EnvironmentReport
         }
         catch (System.Security.Cryptography.CryptographicException)
         {
-            return "未签名（NotSigned）——“无法验证发布者”警告的直接原因，见 docs/code-signing-plan.md";
+            return "未签名（NotSigned）——“无法验证发布者”警告的直接原因，见 内部文档";
         }
         catch (Exception ex)
         {

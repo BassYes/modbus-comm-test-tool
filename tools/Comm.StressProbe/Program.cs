@@ -461,7 +461,7 @@ public static class Program
         builder.AppendLine();
         builder.AppendLine("> 说明：这些数字是**软件上限参考值**（回环传输、无硬件、无界面渲染）。");
         builder.AppendLine("> 现场硬件相关的结论（真实适配器吞吐、1000 帧/s 下的界面可操作性、24 h 稳定性）仍需在目标机上用");
-        builder.AppendLine("> `tools\\Invoke-SoakTest.ps1` 与 `docs/hardware-compatibility-matrix-v1.md` 的清单回填。");
+        builder.AppendLine("> `tools\\Invoke-SoakTest.ps1` 与 `内部文档` 的清单回填。");
 
         File.WriteAllText(path, builder.ToString(), Encoding.UTF8);
     }

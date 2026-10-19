@@ -125,7 +125,7 @@ signtool verify /pa /v CommTestTool.exe
 | `New-DevCodeSigningCert.ps1` | 创建开发自签名证书并装入受信任存储 | 仅本机/域内有效；`-PfxPath` 可导出 PFX（**切勿提交进仓库**） |
 | `New-AppIcon.ps1` | 生成 `src\Comm.App.Wpf\app.ico`（16/24/32/48/64/128/256） | 已有设计稿时直接替换 `app.ico`，不要再运行 |
 | `Unblock-Build.ps1` | 清除 MOTW（等价于“属性 → 解除锁定”） | 只对本机有效；对外分发请用签名 |
-| `Invoke-HilProbe.ps1` | 真实硬件回归：调 `tools\Comm.HilProbe` 遍历波特率/校验位 | 只发 `03` 只读请求；报告回填 `docs\hardware-compatibility-matrix-v1.md` |
+| `Invoke-HilProbe.ps1` | 真实硬件回归：调 `tools\Comm.HilProbe` 遍历波特率/校验位 | 只发 `03` 只读请求；报告回填 `内部文档` |
 
 ### 发布与签名（M2.5 / R-20）
 

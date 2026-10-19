@@ -1,19 +1,19 @@
-﻿#!/usr/bin/env bash
-# 依次打开各功能页并截图，用于人工核对界面（开发自检用，不参与构建）。
-#
-# 用法：
-#   bash docs/capture-pages.sh                 # 默认：最大化逐页截图（12 个功能页：1-8 会话页，9-12 全局页）
-#   bash docs/capture-pages.sh --min           # 900×480 最小窗口逐页截图（B-01 验收）
-#   bash docs/capture-pages.sh --pages 2,8     # 只截指定页
-#
-# DPI 核对（100% / 150% / 200%）无法在脚本内切换（需要重新登录会话），
-# 请按 docs/m2.5-交付说明.md 的“干净机冒烟清单”手工把系统缩放改为 150%/200%
-# 后再运行本脚本，并把结果作为发版前的人工核对项（规划 22.4 第 5 点）。
+﻿ !/usr/bin/env bash
+  依次打开各功能页并截图，用于人工核对界面（开发自检用，不参与构建）。
+ 
+  用法：
+    bash docs/capture-pages.sh                   默认：最大化逐页截图（12 个功能页：1-8 会话页，9-12 全局页）
+    bash docs/capture-pages.sh --min             900×480 最小窗口逐页截图（B-01 验收）
+    bash docs/capture-pages.sh --pages 2,8       只截指定页
+ 
+  DPI 核对（100% / 150% / 200%）无法在脚本内切换（需要重新登录会话），
+  请按 内部说明 的“干净机冒烟清单”手工把系统缩放改为 150%/200%
+  后再运行本脚本，并把结果作为发版前的人工核对项（规划 22.4 第 5 点）。
 set -e
 
 MODE="full"
 PAGES="1 2 3 4 5 6 7 8 9 10 11 12"
-while [ $# -gt 0 ]; do
+while [ $  -gt 0 ]; do
   case "$1" in
     --min) MODE="min"; shift ;;
     --pages) PAGES="$(echo "$2" | tr ',' ' ')"; shift 2 ;;
@@ -34,7 +34,7 @@ capture() {
   sleep 9
 
   if [ "$MODE" = "min" ]; then
-    # 把主窗口改为 900×480（B-01：最小可用尺寸），再截图
+      把主窗口改为 900×480（B-01：最小可用尺寸），再截图
     powershell.exe -NoProfile -Command "
       Add-Type -Namespace Win -Name Api -MemberDefinition '
         [DllImport(\"user32.dll\")] public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);

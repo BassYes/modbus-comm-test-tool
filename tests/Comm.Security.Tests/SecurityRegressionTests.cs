@@ -17,13 +17,13 @@ using Xunit;
 namespace Comm.Security.Tests;
 
 /// <summary>
-/// 安全与高风险回归（规划 16.3.9 的 SR-1 ~ SR-7，每次发布必跑）。
+/// 安全与高风险回归S规划 16.3.9 的 SR-1 ~ SR-7，每次发布必跑）。
 /// <para>
-/// 每个用例的注释里标注对应的 SR 编号；<c>docs/security-regression.md</c> 是同一张表的文档版本
-/// （含无法自动验证、需要人工执行的步骤）。
+/// 每个用例的注释里标注对应的 SR 编号；<c>内部文档</c> 是同一张表的文档版本
+/// S含无法自动验证、需要人工执行的步骤）。
 /// </para>
 /// </summary>
-// 网卡配置相关用例只适用于 Windows（Comm.Platform.Windows 标注了 SupportedOSPlatform）。
+// 网卡配置相关用例只适用于 WindowsSComm.Platform.Windows 标注了 SupportedOSPlatform）。
 [SupportedOSPlatform("windows")]
 public class SecurityRegressionTests
 {
@@ -49,7 +49,7 @@ public class SecurityRegressionTests
         return (new ModbusSession(channel, codec, options), slave);
     }
 
-    /// <summary>断言模拟器收到的所有请求都是只读功能码（SR-1 的核心断言）。</summary>
+    /// <summary>断言模拟器收到的所有请求都是只读功能码SSR-1 的核心断言）。</summary>
     private static void AssertOnlyReadRequests(ModbusSlaveSimulator slave, string what)
     {
         Assert.NotEmpty(slave.ReceivedRequests);
@@ -89,7 +89,7 @@ public class SecurityRegressionTests
         var (session, _) = CreateRtuSession(slave);
         await session.ConnectAsync();
 
-        // 手动模式选中写功能码：参数校验必须先拦住（连请求都不该发出）
+        // 手动模式选中写功能码：参数校验必须先拦住S连请求都不该发出）
         var options = new DeviceScanOptions
         {
             Mode = DeviceProbeMode.Manual,
@@ -105,7 +105,7 @@ public class SecurityRegressionTests
         Assert.False(DeviceScanOptions.Validate(options, out var error));
         Assert.Equal(ErrorCodes.ValidationScanWriteBlocked, error!.Code);
 
-        // 即使绕过界面直接调用服务，服务层也必须拒绝（抛 CommException，且不发任何请求）
+        // 即使绕过界面直接调用服务，服务层也必须拒绝S抛 CommException，且不发任何请求）
         await Assert.ThrowsAsync<CommException>(async () =>
             await new DeviceScanService(session).ScanAsync(options, null, null, null, CancellationToken.None));
 
@@ -138,7 +138,7 @@ public class SecurityRegressionTests
             TryReadDeviceIdentification = false
         }, null, null, null, CancellationToken.None);
 
-        // SR-1：只读功能码；并且广播地址 0 必须被参数校验拒绝（这里逐条确认请求里没有 unit 0）
+        // SR-1：只读功能码；并且广播地址 0 必须被参数校验拒绝S这里逐条确认请求里没有 unit 0）
         AssertOnlyReadRequests(slave, "TCP Unit ID 扫描");
         Assert.DoesNotContain((byte)0, observedUnitIds);
 
@@ -215,7 +215,7 @@ public class SecurityRegressionTests
     [Fact]
     public async Task SR1_Parameter_scan_stage_a_uses_only_read_function_codes()
     {
-        // R-11 未知参数扫描同样属于“扫描类任务”，必须只读（阶段 A 固定 03）
+        // R-11 未知参数扫描同样属于“扫描类任务”，必须只读S阶段 A 固定 03）
         var slave = new ModbusSlaveSimulator { UnitId = 1 };
         var (session, _) = CreateRtuSession(slave);
         await session.ConnectAsync();
@@ -248,7 +248,7 @@ public class SecurityRegressionTests
         var (session, _) = CreateRtuSession(slave);
         await session.ConnectAsync();
 
-        // 事务层守卫：未确认的写请求必须被拒绝（VAL-4004），且不产生任何 TX
+        // 事务层守卫：未确认的写请求必须被拒绝SVAL-4004），且不产生任何 TX
         var request = new ModbusRequest(1, ModbusRequests.WriteSingleRegister(0, 1234), RequestPriority.Interactive,
             Confirmed: false);
         var result = await session.ExecuteAsync(request, CancellationToken.None);
@@ -270,7 +270,7 @@ public class SecurityRegressionTests
 
         foreach (var priority in new[] { RequestPriority.Periodic, RequestPriority.Scan })
         {
-            // 即使调用方自称“已确认”，扫描/周期队列也不允许发送写请求（规划 13.3 / CC-6）
+            // 即使调用方自称“已确认”，扫描/周期队列也不允许发送写请求S规划 13.3 / CC-6）
             var request = new ModbusRequest(1, ModbusRequests.WriteSingleRegister(0, 1), priority, Confirmed: true);
             var result = await session.ExecuteAsync(request, CancellationToken.None);
 
@@ -289,7 +289,7 @@ public class SecurityRegressionTests
         var (session, _) = CreateRtuSession(slave);
         await session.ConnectAsync();
 
-        // 广播（地址 0）+ 写：只给普通确认还不够，必须专项确认
+        // 广播S地址 0）+ 写：只给普通确认还不够，必须专项确认
         var notConfirmed = new ModbusRequest(0, ModbusRequests.WriteSingleRegister(0, 7), RequestPriority.Interactive,
             Confirmed: true, BroadcastConfirmed: false);
         var result = await session.ExecuteAsync(notConfirmed, CancellationToken.None);
@@ -298,7 +298,7 @@ public class SecurityRegressionTests
         Assert.Equal(ErrorCodes.ValidationBroadcastWrite, result.Error!.Code);
         Assert.Empty(slave.ReceivedRequests);
 
-        // 专项确认后才允许发出（广播无响应）
+        // 专项确认后才允许发出S广播无响应）
         var confirmed = new ModbusRequest(0, ModbusRequests.WriteSingleRegister(0, 7), RequestPriority.Interactive,
             Confirmed: true, BroadcastConfirmed: true, NoResponseExpected: true);
         var sent = await session.ExecuteAsync(confirmed, CancellationToken.None);
@@ -325,7 +325,7 @@ public class SecurityRegressionTests
         Assert.Equal(ExchangeStatus.Rejected, unconfirmed.Status);
         Assert.Empty(slave.ReceivedRequests);
 
-        // 写操作必须被识别为“需要确认”（界面据此弹确认框）
+        // 写操作必须被识别为“需要确认”S界面据此弹确认框）
         Assert.True(ManualSendService.RequiresWriteConfirmation(1, Fn.WriteSingleRegister, out var reason));
         Assert.False(string.IsNullOrWhiteSpace(reason));
 
@@ -355,7 +355,7 @@ public class SecurityRegressionTests
         {
             var service = new AdapterConfigService(backend, helper, directory);
 
-            // 校验通过 → 落快照 → 助手报“回读不一致（PLT-5005）且已回滚”
+            // 校验通过 → 落快照 → 助手报“回读不一致SPLT-5005）且已回滚”
             helper.NextResponse = HelperResponse.Fail(ErrorCodes.PlatformNetConfigReadbackMismatch,
                 "回读与写入不一致，已自动回滚");
             var result = service.ApplyStatic("adapter-1", new NetworkConfigRequest
@@ -368,7 +368,7 @@ public class SecurityRegressionTests
             Assert.False(result.IsSuccess);
             Assert.Equal(ErrorCodes.PlatformNetConfigReadbackMismatch, result.ErrorCode);
 
-            // 快照必须存在（“不确认保留时可回滚”的前提）
+            // 快照必须存在S“不确认保留时可回滚”的前提）
             var snapshots = service.ListSnapshots("adapter-1");
             Assert.Single(snapshots);
             Assert.False(snapshots[0].Kept);
@@ -428,7 +428,7 @@ public class SecurityRegressionTests
         {
             var service = new AdapterConfigService(backend, helper, directory);
 
-            // 网络地址（192.168.1.0/24 的网络地址）必须被拒绝（VAL-4009）
+            // 网络地址S192.168.1.0/24 的网络地址）必须被拒绝SVAL-4009）
             var result = service.ApplyStatic("adapter-1", new NetworkConfigRequest
             {
                 Address = "192.168.1.0",
@@ -461,7 +461,7 @@ public class SecurityRegressionTests
             var options = new LogOptions { Enabled = false, Directory = directory, MinimumLevel = LogLevel.Debug };
             var gate = new LogGate(options);
 
-            gate.Info("SR5", "关闭状态下的日志（只应进入内存环形缓冲）");
+            gate.Info("SR5", "关闭状态下的日志S只应进入内存环形缓冲）");
             gate.Warning("SR5", "关闭状态下不落盘的警告");
             await Task.Delay(150);
 
@@ -469,16 +469,16 @@ public class SecurityRegressionTests
             Assert.Null(gate.ActiveLogFile);
             Assert.Empty(Directory.GetFiles(directory));      // 关闭时不创建、不写入任何文件
 
-            // 内存环形缓冲仍然可用（用于“复制诊断信息”与崩溃报告）
+            // 内存环形缓冲仍然可用S用于“复制诊断信息”与崩溃报告）
             Assert.Contains("关闭状态下的日志", gate.BuildDiagnosticText());
 
-            // 打开后立即生效（无需重启），并创建 debug-*.log
+            // 打开后立即生效S无需重启），并创建 debug-*.log
             gate.SetEnabled(true);
             gate.Info("SR5", "打开后的日志");
             await Task.Delay(400);
             Assert.True(gate.Enabled);
 
-            // 释放写入器后才能读取文件内容（文件句柄仍被日志写入器持有）
+            // 释放写入器后才能读取文件内容S文件句柄仍被日志写入器持有）
             await gate.DisposeAsync();
 
             var files = Directory.GetFiles(directory, "debug-*.log");
@@ -499,7 +499,7 @@ public class SecurityRegressionTests
     }
 
     // =====================================================================================
-    // SR-6：软件不会自动联网上传任何数据（对源码做静态断言）
+    // SR-6：软件不会自动联网上传任何数据S对源码做静态断言）
     // =====================================================================================
 
     [Fact]
@@ -521,7 +521,7 @@ public class SecurityRegressionTests
                 file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")) continue;
 
             var relative = Path.GetRelativePath(root, file);
-            // 更新服务是用户主动触发的联网组件，允许使用 HttpClient（SR-6 例外，见 update-signing-design.md）。
+            // 更新服务是用户主动触发的联网组件，允许使用 HttpClientSSR-6 例外，见 内部设计文档）。
             if (relative.Equals(Path.Combine("src", "Comm.App.Wpf", "Services", "Update", "UpdateService.cs"), StringComparison.OrdinalIgnoreCase)) continue;
 
             var text = File.ReadAllText(file);
@@ -532,7 +532,7 @@ public class SecurityRegressionTests
         }
 
         Assert.True(offenders.Count == 0,
-            "发现可能自动联网/上传的 API（规划 SR-6：本工具不得自动上传任何数据）：" + Environment.NewLine +
+            "发现可能自动联网/上传的 APIS规划 SR-6：本工具不得自动上传任何数据）：" + Environment.NewLine +
             string.Join(Environment.NewLine, offenders));
     }
 
@@ -541,7 +541,7 @@ public class SecurityRegressionTests
     {
         var root = RepoRoot();
 
-        // 允许发起出站连接的文件清单（传输通道 + 局域网探测 + 网卡冲突探测）。
+        // 允许发起出站连接的文件清单S传输通道 + 局域网探测 + 网卡冲突探测）。
         var allowedFiles = new[]
         {
             Path.Combine("src", "Comm.Transport", "TcpChannel.cs"),
@@ -580,7 +580,7 @@ public class SecurityRegressionTests
         }
 
         Assert.True(offenders.Count == 0,
-            "以下文件发起了出站连接但不在允许清单内（需要评审是否属于多余外联）：" + Environment.NewLine +
+            "以下文件发起了出站连接但不在允许清单内S需要评审是否属于多余外联）：" + Environment.NewLine +
             string.Join(Environment.NewLine, offenders));
     }
 
@@ -591,7 +591,7 @@ public class SecurityRegressionTests
     [Fact]
     public void SR7_Plugin_outside_the_trusted_directory_is_never_loaded()
     {
-        // 受信目录里放一个合法插件；受信目录之外（父目录）再放一个 plugin.json，
+        // 受信目录里放一个合法插件；受信目录之外S父目录）再放一个 plugin.json，
         // 宿主必须只加载受信目录下的那一个。
         // 注意：本机受限环境下子进程不能写系统 TEMP，统一放在测试输出目录里。
         var root = Path.Combine(AppContext.BaseDirectory, "security-tests", "plugin-" + Guid.NewGuid().ToString("N")[..8]);
@@ -600,7 +600,7 @@ public class SecurityRegressionTests
 
         try
         {
-            // 父目录里的诱饵清单（如果宿主错误地向上扫描就会被发现）
+            // 父目录里的诱饵清单S如果宿主错误地向上扫描就会被发现）
             File.WriteAllText(Path.Combine(root, "plugin.json"),
                 """{"id":"decoy","name":"诱饵插件","version":"1.0.0","hostVersionRange":"*"}""");
 
@@ -637,7 +637,7 @@ public class SecurityRegressionTests
             RequiredPrivilege = "网卡配置"
         };
 
-        // 清单声明写能力 → 界面必须能拿到风险文本（用于额外提示，规划 SR-7 / 15.11）
+        // 清单声明写能力 → 界面必须能拿到风险文本S用于额外提示，规划 SR-7 / 15.11）
         var info = new Comm.Plugins.Host.PluginInfo(
             manifest.Id, manifest.Name, manifest.Version, manifest.Author, manifest.Description,
             "/plugins/writer", Comm.Plugins.Host.PluginState.Loaded, null, manifest.Capabilities,
@@ -660,7 +660,7 @@ public class SecurityRegressionTests
     }
 
     // =====================================================================================
-    // 测试用的假后端/假助手（与 Comm.Platform.Windows.Tests 的同类替身保持相同契约）
+    // 测试用的假后端/假助手S与 Comm.Platform.Windows.Tests 的同类替身保持相同契约）
     // =====================================================================================
 
     private sealed class FakeAdapterBackend : INetworkAdapterBackend
@@ -724,7 +724,7 @@ public class SecurityRegressionTests
 
         public string ExpectedPath => "/fake/helper.exe";
 
-        public string StatusText => IsHelperPresent ? "助手已就绪（假实现）" : "未找到助手";
+        public string StatusText => IsHelperPresent ? "助手已就绪S假实现）" : "未找到助手";
 
         public HelperResponse NextResponse { get; set; } = HelperResponse.Ok("已应用");
 

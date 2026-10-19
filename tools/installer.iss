@@ -6,13 +6,13 @@
 ;   （前提：安装包与其中程序均已签名，见 R-20）。
 ;
 ; 约定：只从 tools\Publish-App.ps1 的产物目录（artifacts\publish）取文件，
-;       不从 bin\Debug 打包（避免中间文件与残留标记，见 docs/build-environment.md）。
+;       不从 bin\Debug 打包（避免中间文件与残留标记，见 内部文档）。
 ;
 ; 用法（需要本机安装 Inno Setup 6，且已把 ISCC.exe 放进 PATH 或使用 -InnoCompiler 指定）：
 ;   powershell -File tools\Build-Installer.ps1                 # 先用内置“无 Inno”回退打包
 ;   powershell -File tools\Build-Installer.ps1 -UseInno        # 有 Inno Setup 时生成正式安装包
 ;
-; 安装形态（per-user，与便携版共存，互不影响）——见 docs/per-user-install-plan.md：
+; 安装形态（per-user，与便携版共存，互不影响）——见 内部文档：
 ;   应用目录：{app}\ = %LOCALAPPDATA%\Programs\通讯测试工具\（CommTestTool.exe + 依赖 + helper\ + plugins\）
 ;   用户数据：%LOCALAPPDATA%\通讯测试工具\data\     （设置、方案、网卡快照；由 install.flag 明确安装形态，不随可写性漂移）
 ;   日志/导出：%LOCALAPPDATA%\通讯测试工具\{logs,exports}\（卸载保留，不删除）
@@ -93,7 +93,7 @@ Type: files; Name: "{app}\install.flag"
 [Code]
 // ---------------------------------------------------------------------------
 // 方案 B（per-user 安装）：旧全局安装检测 + 安装标记 + 条件卸载清理
-// 文档：docs/per-user-install-plan.md
+// 文档：内部文档
 // ---------------------------------------------------------------------------
 
 // 旧版是 admin 安装、注册在 HKLM；新版注册在 HKCU。同一 AppId → 需要提示先卸载旧版。
