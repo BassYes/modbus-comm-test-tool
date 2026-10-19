@@ -21,6 +21,7 @@ jobs:
         shell: pwsh
         run: |
           .\tools\Publish-App.ps1
+          New-Item -ItemType Directory -Force artifacts | Out-Null
           Compress-Archive -Path artifacts\publish\* -DestinationPath artifacts\CommTestTool-${{ github.ref_name }}-win-x64.zip -Force
 
       - name: Generate update manifest
