@@ -6,9 +6,15 @@ on:
       - 'v*'
   workflow_dispatch:
 
+# 创建 Release 与上传附件需要写权限；仓库默认若为只读，这里显式声明可避免
+# “Resource not accessible by integration”。
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
