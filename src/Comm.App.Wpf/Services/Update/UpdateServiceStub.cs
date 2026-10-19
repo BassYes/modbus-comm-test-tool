@@ -5,9 +5,9 @@ namespace Comm.App.Wpf.Services.Update;
 /// </summary>
 public sealed class UpdateServiceStub : IUpdateService
 {
-    public string CurrentVersion => "0.4.1";
+    public string CurrentVersion => "0.4.2";
 
-    public long CurrentBuild => 401;
+    public long CurrentBuild => 402;
 
     public Task<UpdateCheckResult> CheckForUpdatesAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(new UpdateCheckResult(false, null, "Update service is not implemented yet."));

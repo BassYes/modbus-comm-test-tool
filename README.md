@@ -1,4 +1,4 @@
-﻿# 通讯测试工具 v0.4.1（Modbus RTU / Modbus TCP 现场调试）
+# 通讯测试工具 v0.4.2（Modbus RTU / Modbus TCP 现场调试）
 
 按《通讯测试工具-产品与功能规划》实施的可运行版本：**M1 通信核心 + M2 定位与发现 + M2.5 稳定化与可分发基线 + M3 网络配置与扩展 + M4 加固与发布**。
 
@@ -274,7 +274,27 @@ powershell -File tools/Invoke-SoakTest.ps1
 
 ---
 
-## 9. 开源与隐私声明
+## 9. v0.4.2 安装改 per-user（无 UAC，2026-10-19）
+
+安装包改为**当前用户安装**：不再请求管理员，安装全程不弹 UAC，同时修掉“安装到可写目录后数据目录漂移”的隐患。
+完整方案与实施记录见 [per-user 安装方案](docs/per-user-install-plan.md)。
+
+| 变更 | 内容 | 关键位置 |
+|---|---|---|
+| 提权模式 | `PrivilegesRequired=admin` → `lowest`：装到 `%LOCALAPPDATA%\Programs\通讯测试工具`，不写 Program Files | `tools/installer.iss` |
+| 升级路径 | `UsePreviousAppDir=no` + 检测旧“全局安装”并提示先卸载；配置自动沿用（数据仍在 `%LOCALAPPDATA%\通讯测试工具\data`） | `installer.iss` `[Code]` |
+| 数据目录 | 新增安装标记判定（`install.flag` → HKCU 注册表 → `unins000.exe` 三重兜底）：安装形态固定使用用户目录，不再因“程序目录可写”被误判为便携 | `Comm.Diagnostics/AppPaths.cs` |
+| 卸载 | 不再删除 `data/logs/exports`；仅当程序目录存在 `portable.flag`（用户显式声明便携）时才清理运行期目录 | `installer.iss` |
+| 日志/导出 | 安装形态统一落 `%LOCALAPPDATA%\通讯测试工具\{logs,exports}`，与数据同源，卸载不误删 | `AppPaths.cs`、`LogGate.cs` |
+| 设置页 | 显示“当前形态 + 三种目录 + 策略”，便于现场核对 | `SettingsViewModel.cs` |
+
+**共享工位**：per-user 安装每个 Windows 账号各一份（约 233 MB/人），多人共用请发便携 zip。
+
+安装包仍未签名，下载后首次运行仍会提示“未知发布者 / SmartScreen”——per-user 只去掉 UAC 这一道。
+
+---
+
+## 10. 开源与隐私声明
 
 - 本项目采用 MIT 许可证，源码可自由使用、修改与分发。
 - 本程序不会自动上传任何数据；所有日志、报文记录、诊断包仅保存在本机。
