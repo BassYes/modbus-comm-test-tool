@@ -38,7 +38,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$dotnet = 'C:\Users\Bass\.dotnet\dotnet.exe'
+$dotnet = Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
 if (-not (Test-Path -LiteralPath $dotnet)) { $dotnet = 'dotnet' }
 
 if ($Quick) { $Hours = 5.0 / 60.0; $RoundSeconds = 10 }

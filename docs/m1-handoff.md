@@ -18,7 +18,7 @@
 1. M1 已经交付**可用的 Modbus RTU/TCP 通信核心 + 7 个功能页界面**，M2 是在这个地基上加功能，**不需要重写通信层**。
 2. M2 的三个功能都有现成积木可复用：`DataScanService`（取值）+ `DataDecoder.TryDecodeNumber`（多类型多字节序解释）→ 寄存器定位；`SubnetCalculator`（算范围）+ `NetworkAdapters`（取本机网卡）→ 局域网扫描；`SettingsStore`（带 schemaVersion 的原子写）+ 各 ViewModel 骨架 → 持久化。
 3. **有 5 个硬约束不能破坏**（第 4 章），其中 3 个已在 M1 里踩过坑修过：待配对响应必须先登记后发送、回显抑制只能用于读功能码、扫描类任务绝不产生写功能码。
-4. 本机环境特殊：**只能用 `C:\Users\Bass\.dotnet\dotnet.exe` 构建**，`dotnet test` 会因 testhost 权限问题中止，请用 `tests/Comm.TestRunner`。
+4. 本机环境特殊：**只能用 `%USERPROFILE%\.dotnet\dotnet.exe` 构建**，`dotnet test` 会因 testhost 权限问题中止，请用 `tests/Comm.TestRunner`。
 5. 新增测试程序集必须注册到 `tests/Comm.TestRunner/Program.cs` 的 `assemblies` 数组，否则本地跑不到。
 
 ---
@@ -66,7 +66,7 @@
 
 ```bash
 # 本机未装 Visual Studio；系统默认 dotnet 只有 SDK 3.0.101，不能用于本仓库
-DOTNET=C:/Users/Bass/.dotnet/dotnet.exe        # SDK 8.0.426（用户目录安装，未注册 PATH）
+DOTNET=%USERPROFILE%/.dotnet/dotnet.exe        # SDK 8.0.426（用户目录安装，未注册 PATH）
 
 cd "E:/Download/DSH/通讯测试工具"
 $DOTNET build CommTestTool.sln                 # 期望：0 个错误 0 个警告

@@ -2,11 +2,11 @@
 
 ## 1. 工具链
 
-- 本机未安装 Visual Studio，`.NET SDK 8.0.426` 安装在用户目录：`C:\Users\Bass\.dotnet\dotnet.exe`（未写入 PATH，命令需写全路径）。
+- 本机未安装 Visual Studio，`.NET SDK 8.0.426` 安装在用户目录：`%USERPROFILE%\.dotnet\dotnet.exe`（未写入 PATH，命令需写全路径）。
 - 系统默认 `dotnet`（`C:\Program Files\dotnet`）只有 SDK 3.0.101，**不能**用于构建本仓库（要求 .NET 8）。
 
 ```bash
-DOTNET=C:/Users/Bass/.dotnet/dotnet.exe
+DOTNET=%USERPROFILE%/.dotnet/dotnet.exe
 cd "E:/Download/DSH/通讯测试工具"
 $DOTNET build CommTestTool.sln
 $DOTNET run --project src/Comm.App.Wpf

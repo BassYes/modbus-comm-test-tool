@@ -60,7 +60,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $project  = Join-Path $repoRoot 'tools\Comm.HilProbe\Comm.HilProbe.csproj'
 
-$dotnet = 'C:\Users\Bass\.dotnet\dotnet.exe'
+$dotnet = Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
 if (-not (Test-Path -LiteralPath $dotnet)) { $dotnet = 'dotnet' }
 
 if (-not $Port) {

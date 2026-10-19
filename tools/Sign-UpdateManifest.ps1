@@ -12,7 +12,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$dotnet = 'C:/Users/Bass/.dotnet/dotnet.exe'
+$dotnet = Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
 if (-not (Test-Path $dotnet)) { $dotnet = 'dotnet' }
 
 $args = @('run', '--project', (Join-Path $repoRoot 'tools\Comm.UpdateSigner\Comm.UpdateSigner.csproj'), '--', 'sign', '--manifest', $Manifest, '--key', $Key)

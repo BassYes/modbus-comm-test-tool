@@ -33,7 +33,7 @@ Unblock-File .\CommTestTool.exe
 .\tools\Unblock-Build.ps1 -Path .\src\Comm.App.Wpf\bin
 
 # 或者干脆重新编译，新文件天然没有标记
-C:\Users\Bass\.dotnet\dotnet.exe build CommTestTool.sln
+%USERPROFILE%\.dotnet\dotnet.exe build CommTestTool.sln
 ```
 
 > 如果提示“因为在此系统上禁止运行脚本”，用：

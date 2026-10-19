@@ -7,7 +7,7 @@
 运行自动化部分：
 
 ```bash
-DOTNET=C:/Users/Bass/.dotnet/dotnet.exe
+DOTNET=%USERPROFILE%/.dotnet/dotnet.exe
 $DOTNET run --project tests/Comm.TestRunner -- --assembly=tests/Comm.Security.Tests/bin/Debug/net8.0/Comm.Security.Tests.dll
 ```
 

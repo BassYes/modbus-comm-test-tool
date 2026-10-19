@@ -6,7 +6,7 @@
     直接把人 bin\Debug 打包发出去，是最容易踩坑的做法（一堆中间文件 + 可能残留标记）。
     本脚本走“发布目录”这条正路：
 
-      1. 用本机 .NET 8 SDK（C:\Users\Bass\.dotnet\dotnet.exe）publish 到 artifacts\publish；
+      1. 用本机 .NET 8 SDK（%USERPROFILE%\.dotnet\dotnet.exe）publish 到 artifacts\publish；
       2. 清掉产物上的 MOTW（防止产物被搬过之后又带上标记）；
       3. 可选地逐个 exe/dll 签名；
       4. 可选地打成 zip（注意：zip 经网盘/微信传输后，解压出来的 exe 会重新带上标记）；
@@ -71,7 +71,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $project  = Join-Path $repoRoot 'src\Comm.App.Wpf\Comm.App.Wpf.csproj'
 
 # 本机默认 dotnet 只有 3.0.101，必须用用户目录下的 8.x SDK
-$dotnet = 'C:\Users\Bass\.dotnet\dotnet.exe'
+$dotnet = Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
 if (-not (Test-Path -LiteralPath $dotnet)) { $dotnet = 'dotnet' }
 
 $selfContained = -not $FrameworkDependent
