@@ -23,7 +23,7 @@ public static class Program
             typeof(Comm.Scanning.Tests.DataDecoderTests).Assembly,
             typeof(Comm.Network.Tests.SubnetCalculatorTests).Assembly,
             typeof(Comm.Infrastructure.Tests.ShutdownCoordinatorTests).Assembly,
-            // M3a / M3b 新增的测试程序集（见 docs/m3-交付说明.md）
+            // M3a / M3b 新增的测试程序集
             typeof(Comm.Platform.Windows.Tests.NetworkConfigValidatorTests).Assembly,
             typeof(Comm.NetConfigHelper.Tests.RollbackCountdownTests).Assembly,
             typeof(Comm.Plugins.Host.Tests.PluginHostTests).Assembly,

@@ -349,7 +349,6 @@ App.Wpf (UI)
 - `tools/Sign-UpdateManifest.ps1` / `tools/Verify-UpdateManifest.ps1`：PowerShell 包装。
 - `src/Comm.App.Wpf/Services/Update/*`：更新服务契约与占位实现。
 - `docs/samples/update-manifest.example.json`：更新清单示例。
-- `docs/github-actions-release-draft.md`：GitHub Actions 发布流程草稿。
 
 ### 原型验证命令
 

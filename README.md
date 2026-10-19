@@ -118,7 +118,6 @@
 
 | 内容 | 位置 |
 |---|---|
-| 工程结构、构建、测试、实现决策、审计修复记录 | [docs/开发与审计记录.md](docs/开发与审计记录.md) |
 | 构建环境与常见构建问题 | [docs/build-environment.md](docs/build-environment.md) |
 | 安装包脚本（Inno Setup）与 per-user 方案 | [tools/installer.iss](tools/installer.iss)、[docs/per-user-install-plan.md](docs/per-user-install-plan.md) |
 | 发布与更新清单签名 | `.github/workflows/release.yml`、`tools/Generate-UpdateManifest.ps1` |
