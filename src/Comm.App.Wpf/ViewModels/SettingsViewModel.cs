@@ -13,7 +13,7 @@ namespace Comm.App.Wpf.ViewModels;
 public partial class SettingsViewModel : ObservableObject
 {
     private readonly AppServices _app;
-    private readonly IUpdateService _updateService = new UpdateService("https://example.invalid/update-manifest.json", string.Empty, AppInfo.Version, 0);
+    private readonly IUpdateService _updateService = new UpdateService(UpdateService.DefaultManifestUrl, UpdateService.DefaultPublicKey, AppInfo.Version, 0);
     private UpdateManifest? _updateManifest;
     private string? _updatePackagePath;
 

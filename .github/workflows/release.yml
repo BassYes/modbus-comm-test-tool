@@ -44,7 +44,7 @@ jobs:
       - name: Verify update manifest
         shell: pwsh
         run: |
-          .\tools\Verify-UpdateManifest.ps1 -Manifest artifacts\update-manifest.signed.json -PublicKeyBase64 "<EMBEDDED_PUBLIC_KEY>"
+          .\tools\Verify-UpdateManifest.ps1 -Manifest artifacts\update-manifest.signed.json -PublicKeyBase64 "5Vp7fPpSrbX0KEJMlnRh2YYzIclyim6UQtXYfvll3Dc="
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2

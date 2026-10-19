@@ -16,6 +16,9 @@ namespace Comm.App.Wpf.Services.Update;
 /// </summary>
 public sealed class UpdateService : IUpdateService
 {
+    public const string DefaultPublicKey = "5Vp7fPpSrbX0KEJMlnRh2YYzIclyim6UQtXYfvll3Dc=";
+    public const string DefaultManifestUrl = "https://github.com/BassYes/modbus-comm-test-tool/releases/latest/download/update-manifest.signed.json";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
