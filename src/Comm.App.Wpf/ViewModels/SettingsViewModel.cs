@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using Comm.App.Wpf.Services;
 using Comm.App.Wpf.Services.Update;
 using System.IO;
@@ -195,10 +195,12 @@ public partial class SettingsViewModel : ObservableObject
             var info = AppPaths.Info;
             var lines = new List<string>
             {
+                $"当前形态：{(AppPaths.IsInstalledForm ? "安装版（per-user）" : "便携版")}",
                 $"实际数据目录：{info.Directory}",
                 $"便携目录（程序同级）：{AppPaths.PortableDataDirectory}；便携标志 portable.flag：{(AppPaths.HasPortableFlag ? "存在" : "不存在")}",
-                $"用户目录（不可写时回退）：{AppPaths.UserDataDirectory}",
-                "策略：程序目录可写 → 便携 data/；不可写 → %LOCALAPPDATA%\\通讯测试工具\\data。"
+                $"安装标记 install.flag：{(AppPaths.HasInstallFlag ? "存在" : "不存在")}",
+                $"用户目录（安装形态的目标）：{AppPaths.UserDataDirectory}",
+                "策略：portable.flag → 便携 data/；安装标记 → 用户目录 data/；其余按可写性回退。"
             };
             if (!string.IsNullOrEmpty(info.FallbackReason)) lines.Add($"提示：{info.FallbackReason}");
             return string.Join(Environment.NewLine, lines);

@@ -1,4 +1,4 @@
-﻿# 构建环境与自检说明（开发备忘）
+# 构建环境与自检说明（开发备忘）
 
 ## 1. 工具链
 
@@ -64,14 +64,17 @@ powershell -File tools/Invoke-SoakTest.ps1                     # 24 h 长跑（�
 
 ## 4. 运行时文件
 
-M2.5（R-21 X-2）起，**数据目录由 `Comm.Diagnostics.AppPaths` 统一解析**：
+M2.5（R-21 X-2）起，**数据目录由 `Comm.Diagnostics.AppPaths` 统一解析**；
+方案 B（per-user 安装）起改为「显式声明 > 安装形态 > 可写性回退」，见 [per-user 安装方案](per-user-install-plan.md)：
 
-1. 程序目录可写 → 程序同级 `data/`（便携形态，下面的表都相对它）；
-2. 程序目录不可写（`Program Files`、只读 U 盘）→ `%LOCALAPPDATA%\通讯测试工具\data`；
-3. 两者都不可写 → 系统临时目录，并在日志与设置页给出提示。
+1. `portable.flag` 存在且可写 → 程序同级 `data/`（显式便携，最高优先）；
+2. **安装形态**（存在 `install.flag` / HKCU 注册表标记 / Inno `unins000.exe`）→ `%LOCALAPPDATA%\通讯测试工具\data`；
+   与历史版本路径一致，**升级不需要迁移**；
+3. 非安装形态且程序目录可写 → 程序同级 `data/`（解压即用的便携版）；
+4. 程序目录不可写（只读 U 盘等）→ 用户目录；5. 两者都不可写 → 系统临时目录，并在日志与设置页给出提示。
 
-程序目录存在 `portable.flag` 时表示“明确要求便携”；设置页可一键创建，也可在便携↔用户目录间迁移设置。
-**实际使用的目录与回退原因显示在“设置与日志”页与启动日志里。**
+程序目录存在 `portable.flag` 时表示“明确要求便携”（优先于安装标记）；设置页可一键创建，也可在便携↔用户目录间迁移设置。
+**实际使用的目录、形态与回退原因显示在“设置与日志”页与启动日志里。**
 
 | 路径（相对数据目录） | 内容 |
 |---|---|
@@ -118,7 +121,9 @@ artifacts\publish\
 .\tools\Build-Installer.ps1 -InnoCompiler 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
 ```
 
-- 产物在 `artifacts\installer\`。安装版把程序装到 `Program Files`、用户数据在 `%APPDATA%\通讯测试工具\`（`AppPaths` 已实现回退）。
+- 产物在 `artifacts\installer\`。**当前为 per-user 安装**（方案 B，见 [per-user 安装方案](per-user-install-plan.md)）：
+  程序装到 `%LOCALAPPDATA%\Programs\通讯测试工具`，用户数据在 `%LOCALAPPDATA%\通讯测试工具\{data,logs,exports}`，
+  **安装全程不弹 UAC**；卸载保留用户数据。多人共享工位请改用便携 zip。
 - 安装出来的文件**不带“来自网络”标记**，这是消除启动提示最有效的一条渠道（规划 22.5.2 L2）。
 
 **Inno Setup 相关注意**：
@@ -167,9 +172,9 @@ artifacts\publish\
 **随包的两个绕过入口**（`artifacts\installer\` 下）：
 
 - `安装-受限环境（双击我）.cmd`：自提权 → 把 `TEMP`/`TMP` 指到 `%LOCALAPPDATA%\CommTestTool\install-temp`（不可写时退到安装包同目录的 `install-temp`）→ 再启动同目录的安装包。
-  关键是**先提权再改 TEMP**，这样安装包进程继承到的是可写的临时目录；直接双击安装包不会继承你在 PowerShell 里改过的 TEMP。
-- 免提权安装：`通讯测试工具-x.y.z-安装包.exe /CURRENTUSER`，装到 `%LOCALAPPDATA%\Programs\通讯测试工具`，不弹 UAC。
-  （`installer.iss` 的 `PrivilegesRequiredOverridesAllowed` 已包含 `commandline`；不加 `/CURRENTUSER` 时行为不变，仍是装到 `Program Files`。）
+  仅在 `%TEMP%` 本身不可写的受限机器上才需要（错误 5 的绕过）。方案 B 后安装包不再请求管理员，**这个启动器已非必需**。
+- 免提权安装现在**是默认行为**：`PrivilegesRequired=lowest`，直接双击即装到 `%LOCALAPPDATA%\Programs\通讯测试工具`。
+  旧的 `/CURRENTUSER` 参数仍可传，但已无区别（`PrivilegesRequiredOverridesAllowed` 已移除）。
 
 > 实测记录（2026-10-19）：同一安装包在同一机器上，`%TEMP%` 指向可写目录时安装成功、退出码 0、675 个文件；
 > 把 TEMP 指回默认目录后再次静默安装同样成功（退出码 0）。两次都已用 `unins000.exe /VERYSILENT` 卸载干净，
@@ -183,4 +188,6 @@ artifacts\publish\
 - 若构建时报“文件被 CommTestTool 占用”，先结束正在运行的实例（`taskkill /IM CommTestTool.exe /F`）。
 - 高 DPI 缩放下窗口按 DIP 布局；M2.5 起主窗口最小尺寸为 **900×480 DIP**，10 个功能页在最小尺寸下均可滚动到底（B-01）。
 - 字体回退链在 `Styles/Theme.xaml`：`UiFont`（微软雅黑 UI → Segoe UI → SimSun）、`MonoFont`（Consolas → Cascadia Mono → Courier New）。
-- 若需要验证“程序目录不可写”的回退路径，可把发布目录放到 `C:\Program Files\<名称>\` 下运行，然后在设置页确认数据目录已变为 `%LOCALAPPDATA%\通讯测试工具\data`。
+- 验证**安装形态**：在程序目录放一个 `install.flag`（或直接跑一次安装包），启动后设置页应显示“当前形态：安装版（per-user）”、
+  数据目录为 `%LOCALAPPDATA%\通讯测试工具\data`；故意删掉 `install.flag` 仍应识别为安装版（注册表标记或 `unins000.exe` 兜底）。
+- 验证**只读目录回退**：把发布目录放到 `C:\Program Files\<名称>\` 下运行（且不带安装标记），设置页应显示回退到用户目录并给出原因。

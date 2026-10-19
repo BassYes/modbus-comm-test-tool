@@ -12,16 +12,20 @@
 ;   powershell -File tools\Build-Installer.ps1                 # 先用内置“无 Inno”回退打包
 ;   powershell -File tools\Build-Installer.ps1 -UseInno        # 有 Inno Setup 时生成正式安装包
 ;
-; 安装形态（与便携版共存，互不影响）：
-;   应用目录：{app}\  = CommTestTool.exe + 依赖 + helper\ + plugins\
-;   用户数据：%APPDATA%\通讯测试工具\            （设置、方案、网卡快照）
-;   日志：    %LOCALAPPDATA%\通讯测试工具\logs\  （程序目录不可写时自动回退到这里）
-;   这是因为安装到 Program Files 后程序目录不可写——AppPaths 已实现该回退（R-21 X-2）。
+; 安装形态（per-user，与便携版共存，互不影响）——见 docs/per-user-install-plan.md：
+;   应用目录：{app}\ = %LOCALAPPDATA%\Programs\通讯测试工具\（CommTestTool.exe + 依赖 + helper\ + plugins\）
+;   用户数据：%LOCALAPPDATA%\通讯测试工具\data\     （设置、方案、网卡快照；由 install.flag 明确安装形态，不随可写性漂移）
+;   日志/导出：%LOCALAPPDATA%\通讯测试工具\{logs,exports}\（卸载保留，不删除）
+;   不写 Program Files、不请求管理员 → 安装全程不弹 UAC。
+;   多人共享工位请改用便携 zip（不安装、各自解压运行）。
 
 #define AppName "通讯测试工具"
 #define AppExeName "CommTestTool.exe"
 #define AppPublisher "通讯测试工具项目组"
 #define AppUrl ""
+
+; 卸载项键名（HKLM 旧版检测 + HKCU 新版标记共用）
+#define AppUninstallKey "{8E4C1F42-5B7A-4D2E-9C3A-6F1D2B0A7C55}_is1"
 
 ; 版本号由 Build-Installer.ps1 通过 /DMyAppVersion=... 注入（唯一来源仍是 Directory.Build.props）
 #ifndef MyAppVersion
@@ -47,12 +51,12 @@ MinVersion=10.0.19044
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 ; 主程序与提权助手都不需要安装时提权；助手在“应用配置”时按需 UAC（AD-08）
-PrivilegesRequired=admin
-; 允许命令行覆盖提权要求：受限环境（%TEMP% 对提权进程不可写、或无法提权）可用
-;   通讯测试工具-x.y.z-安装包.exe /CURRENTUSER
-; 装到 %LOCALAPPDATA%\Programs\通讯测试工具，不需要管理员，也不弹 UAC。
-PrivilegesRequiredOverridesAllowed=dialog commandline
-; 不删除用户数据（卸载时保留设置与日志，便于复查）
+; per-user 安装（方案 B）：装到 %LOCALAPPDATA%\Programs，不需要管理员，安装全程不弹 UAC。
+PrivilegesRequired=lowest
+; 不沿用旧安装目录：旧版是 admin 装在 Program Files，非管理员模式写不进去会报权限错误。
+; 升级路径由 [Code] 的 LegacyAdminInstallExists 提示用户先卸载旧版（配置沿用，无需迁移）。
+UsePreviousAppDir=no
+; 不删除用户数据（卸载时保留设置与日志，便于复查；仅便携形态由 [Code] 清理）
 UninstallDisplayIcon={app}\{#AppExeName}
 CloseApplications=yes
 RestartApplications=no
@@ -81,20 +85,87 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: deskto
 Filename: "{app}\{#AppExeName}"; Description: "启动 {#AppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
-; 只清理程序目录内的运行时产物；用户数据在 %APPDATA%/%LOCALAPPDATA% 下，刻意保留。
-Type: filesandordirs; Name: "{app}\data"
-Type: filesandordirs; Name: "{app}\logs"
-Type: filesandordirs; Name: "{app}\exports"
+; 用户数据一律保留（方案 B / 决策 A）：data/logs/exports 在 %LOCALAPPDATA% 下，卸载程序不碰。
+; 只删安装标记，避免卸载后残留 install.flag 把便携版误判成安装形态。
+; 便携形态（存在 portable.flag）下程序目录里的运行期目录由 [Code] 的 CurUninstallStepChanged 清理。
+Type: files; Name: "{app}\install.flag"
 
 [Code]
-// 安装前检查：目标目录里若已有正在运行的实例，提示先退出（避免文件占用导致安装失败）。
-function InitializeSetup(): Boolean;
+// ---------------------------------------------------------------------------
+// 方案 B（per-user 安装）：旧全局安装检测 + 安装标记 + 条件卸载清理
+// 文档：docs/per-user-install-plan.md
+// ---------------------------------------------------------------------------
+
+// 旧版是 admin 安装、注册在 HKLM；新版注册在 HKCU。同一 AppId → 需要提示先卸载旧版。
+function LegacyAdminInstallExists(): Boolean;
 var
-  ResultCode: Integer;
+  S: String;
+begin
+  Result :=
+    RegQueryStringValue(HKLM, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#AppUninstallKey}', 'InstallLocation', S) or
+    RegQueryStringValue(HKLM, 'Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{#AppUninstallKey}', 'InstallLocation', S);
+end;
+
+function InitializeSetup(): Boolean;
 begin
   Result := True;
-  if Exec('tasklist', '/FI "IMAGENAME eq CommTestTool.exe" /NH', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  if LegacyAdminInstallExists() then
   begin
-    // 具体判断交给 CloseApplications；这里只保证不会静默覆盖正在运行的程序。
+    if MsgBox('检测到旧的“全局安装”（位于 Program Files，需要管理员）。' + #13#10 +
+              '本安装包为“当前用户”安装，两者会并存，并各自出现在“应用和功能”中。' + #13#10 + #13#10 +
+              '建议先卸载旧版本，再安装本版本。' + #13#10 +
+              '配置会自动沿用（数据仍在 %LOCALAPPDATA%\通讯测试工具\data，无需迁移）。' + #13#10 + #13#10 +
+              '是否继续安装？', mbConfirmation, MB_YESNO) = IDNO then
+      Result := False;
+  end;
+end;
+
+// 安装完成后写安装标记：install.flag（主）+ HKCU 注册表（备）。
+// 两者都用容错写入：注册表被策略禁用时只降级为“仅文件标记”，绝不让安装失败。
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Content: String;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    Content :=
+      'form=per-user' + #13#10 +
+      'version={#MyAppVersion}' + #13#10 +
+      'installedAt=' + GetDateTimeString('yyyy-mm-dd hh:nn:ss', '-', ':') + #13#10 +
+      'dir=' + ExpandConstant('{app}') + #13#10;
+
+    if not SaveStringToFile(ExpandConstant('{app}\install.flag'), Content, False) then
+      Log('警告：写入 install.flag 失败，将依赖注册表标记');
+
+    // HKCU 可能被策略/受限环境禁用：异常必须吞掉，否则整个安装会回滚。
+    try
+      RegWriteStringValue(HKCU, 'Software\通讯测试工具', 'InstallForm', 'per-user');
+      RegWriteStringValue(HKCU, 'Software\通讯测试工具', 'InstallDir', ExpandConstant('{app}'));
+    except
+      Log('提示：HKCU 注册表标记写入失败（不影响安装，AppPaths 会改用 install.flag/unins000.exe 判定）');
+    end;
+  end;
+end;
+
+// 卸载：安装形态保留用户数据；仅便携形态（用户在程序目录放了 portable.flag）清理运行期目录。
+// 注册表标记在这里一并删除，避免卸载后残留导致便携版被误判。
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usPostUninstall then
+  begin
+    try
+      RegDeleteValue(HKCU, 'Software\通讯测试工具', 'InstallForm');
+      RegDeleteValue(HKCU, 'Software\通讯测试工具', 'InstallDir');
+      RegDeleteKeyIfEmpty(HKCU, 'Software\通讯测试工具');
+    except
+      Log('提示：清理 HKCU 注册表标记失败（忽略）');
+    end;
+
+    if FileExists(ExpandConstant('{app}\portable.flag')) then
+    begin
+      DelTree(ExpandConstant('{app}\data'), True, True, True);
+      DelTree(ExpandConstant('{app}\logs'), True, True, True);
+      DelTree(ExpandConstant('{app}\exports'), True, True, True);
+    end;
   end;
 end;
