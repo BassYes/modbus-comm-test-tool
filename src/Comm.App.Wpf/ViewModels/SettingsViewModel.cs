@@ -1,5 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 using Comm.App.Wpf.Services;
+using Comm.App.Wpf.Services.Update;
 using System.IO;
 using Comm.Diagnostics;
 using Comm.Settings;
@@ -12,6 +13,9 @@ namespace Comm.App.Wpf.ViewModels;
 public partial class SettingsViewModel : ObservableObject
 {
     private readonly AppServices _app;
+    private readonly IUpdateService _updateService = new UpdateService("https://example.invalid/update-manifest.json", string.Empty, AppInfo.Version, 0);
+    private UpdateManifest? _updateManifest;
+    private string? _updatePackagePath;
 
     public SettingsViewModel(AppServices app)
     {
@@ -56,6 +60,12 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _activeLogFileText = string.Empty;
     [ObservableProperty] private string _versionText = AppInfo.Summary();
 
+    // ---- 更新（M1-M3）
+    [ObservableProperty] private string _updateStatusText = "尚未检查更新。";
+    [ObservableProperty] private string _updateNotes = string.Empty;
+    [ObservableProperty] private string _updateProgressText = string.Empty;
+    [ObservableProperty] private bool _isUpdateAvailable;
+
     /// <summary>X-9：“关于”行：版本 + 提交号 + 构建时间。</summary>
     public string AboutText => AppInfo.FullVersionText;
 
@@ -83,6 +93,73 @@ public partial class SettingsViewModel : ObservableObject
     public ObservableCollection<string> WindowLayouts { get; } = new();
 
     private WorkspaceFile? _loadedWorkspace;
+
+
+    [RelayCommand]
+    private async Task CheckForUpdatesAsync()
+    {
+        UpdateStatusText = "正在检查更新...";
+        try
+        {
+            var result = await _updateService.CheckForUpdatesAsync();
+            IsUpdateAvailable = result.IsUpdateAvailable;
+            UpdateStatusText = result.Message;
+            UpdateNotes = result.Manifest?.Notes ?? string.Empty;
+            _updateManifest = result.Manifest;
+        }
+        catch (Exception ex)
+        {
+            UpdateStatusText = $"检查更新失败：{ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private async Task DownloadUpdateAsync()
+    {
+        if (_updateManifest is null)
+        {
+            UpdateProgressText = "请先检查更新。";
+            return;
+        }
+
+        UpdateProgressText = "正在下载更新...";
+        try
+        {
+            var progress = new Progress<UpdateDownloadProgress>(p => UpdateProgressText = $"已下载 {p.ReceivedBytes} / {p.TotalBytes} 字节");
+            _updatePackagePath = await _updateService.DownloadUpdateAsync(_updateManifest, progress);
+            UpdateProgressText = $"下载完成：{_updatePackagePath}";
+        }
+        catch (Exception ex)
+        {
+            UpdateProgressText = $"下载失败：{ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private async Task ApplyUpdateAsync()
+    {
+        if (_updateManifest is null || _updatePackagePath is null)
+        {
+            UpdateStatusText = "没有可应用的更新包。";
+            return;
+        }
+
+        try
+        {
+            var result = await _updateService.ApplyUpdateAsync(_updatePackagePath, _updateManifest);
+            UpdateStatusText = result.Message;
+            if (result.Success)
+            {
+                _app.Notify("更新助手已启动，程序即将退出。");
+                await Task.Delay(500);
+                System.Windows.Application.Current?.Shutdown();
+            }
+        }
+        catch (Exception ex)
+        {
+            UpdateStatusText = $"应用更新失败：{ex.Message}";
+        }
+    }
 
     private void LoadFromSettings()
     {

@@ -271,3 +271,12 @@ powershell -File tools/Invoke-SoakTest.ps1
 
 `tools/installer.iss` 在本次首次真正编译时修了两处历史问题（此前一直走"无 Inno"回退，所以没暴露）：
 文件头注释误用 `#`（Inno 里是预处理指令，应为 `;`）、`Excludes` 单独成行被当成新的 `[Files]` 条目。
+
+---
+
+## 9. 开源与隐私声明
+
+- 本项目采用 MIT 许可证，源码可自由使用、修改与分发。
+- 本程序不会自动上传任何数据；所有日志、报文记录、诊断包仅保存在本机。
+- 隐私声明：This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.
+- Windows 二进制的免费代码签名由 SignPath.io 提供，证书由 SignPath Foundation 颁发（如启用）：Free code signing provided by SignPath.io, certificate by SignPath Foundation.

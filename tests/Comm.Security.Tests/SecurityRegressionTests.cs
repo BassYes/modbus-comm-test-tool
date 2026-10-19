@@ -520,10 +520,14 @@ public class SecurityRegressionTests
             if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") ||
                 file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")) continue;
 
+            var relative = Path.GetRelativePath(root, file);
+            // 更新服务是用户主动触发的联网组件，允许使用 HttpClient（SR-6 例外，见 update-signing-design.md）。
+            if (relative.Equals(Path.Combine("src", "Comm.App.Wpf", "Services", "Update", "UpdateService.cs"), StringComparison.OrdinalIgnoreCase)) continue;
+
             var text = File.ReadAllText(file);
             foreach (var api in forbidden.Where(api => text.Contains(api, StringComparison.Ordinal)))
             {
-                offenders.Add($"{Path.GetRelativePath(root, file)} 出现 {api}");
+                offenders.Add($"{relative} 出现 {api}");
             }
         }
 
@@ -548,7 +552,8 @@ public class SecurityRegressionTests
             Path.Combine("src", "Comm.Platform.Windows", "NetConfigSupport.cs"),
             Path.Combine("src", "Comm.Platform.Windows", "NetshBackend.cs"),
             Path.Combine("src", "Comm.NetConfigHelper", "HelperServer.cs"),
-            Path.Combine("src", "Comm.NetConfigHelper", "Program.cs")
+            Path.Combine("src", "Comm.NetConfigHelper", "Program.cs"),
+            Path.Combine("src", "Comm.App.Wpf", "Services", "Update", "UpdateService.cs")
         };
 
         var offenders = new List<string>();

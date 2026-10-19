@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build and publish
+        shell: pwsh
+        run: |
+          .\tools\Publish-App.ps1
+          Compress-Archive -Path artifacts\publish\* -DestinationPath artifacts\CommTestTool-${{ github.ref_name }}-win-x64.zip -Force
+
+      - name: Generate update manifest
+        shell: pwsh
+        run: |
+          [xml]$props = Get-Content Directory.Build.props
+          $version = $props.Project.PropertyGroup.Version
+          $build = $props.Project.PropertyGroup.AssemblyVersion.Split('.')[-1]
+          $downloadUrl = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/CommTestTool-${{ github.ref_name }}-win-x64.zip"
+          .\tools\Generate-UpdateManifest.ps1 -Version $version -Build $build -PackagePath "artifacts\CommTestTool-${{ github.ref_name }}-win-x64.zip" -ManifestPath "artifacts\update-manifest.json" -DownloadUrl $downloadUrl -Notes "Release ${{ github.ref_name }}"
+
+      - name: Sign update manifest
+        shell: pwsh
+        env:
+          UPDATE_SIGNING_KEY_BASE64: ${{ secrets.UPDATE_SIGNING_KEY_BASE64 }}
+        run: |
+          $keyPath = Join-Path $env:RUNNER_TEMP "update-signing-ed25519.seed"
+          [IO.File]::WriteAllText($keyPath, [Text.Encoding]::ASCII.GetString([Convert]::FromBase64String($env:UPDATE_SIGNING_KEY_BASE64)))
+          .\tools\Sign-UpdateManifest.ps1 -Manifest artifacts\update-manifest.json -Key $keyPath -Out artifacts\update-manifest.signed.json
+
+      - name: Verify update manifest
+        shell: pwsh
+        run: |
+          .\tools\Verify-UpdateManifest.ps1 -Manifest artifacts\update-manifest.signed.json -PublicKeyBase64 "<EMBEDDED_PUBLIC_KEY>"
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/CommTestTool-${{ github.ref_name }}-win-x64.zip
+            artifacts/update-manifest.signed.json
