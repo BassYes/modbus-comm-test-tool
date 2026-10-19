@@ -20,7 +20,7 @@ jobs:
       - name: Build and publish
         shell: pwsh
         run: |
-          powershell -ExecutionPolicy Bypass -File .\tools\Publish-App.ps1
+          powershell -ExecutionPolicy Bypass -File tools/Publish-App.ps1
           New-Item -ItemType Directory -Force artifacts | Out-Null
           Compress-Archive -Path artifacts\publish\* -DestinationPath artifacts\CommTestTool-${{ github.ref_name }}-win-x64.zip -Force
 
@@ -32,7 +32,7 @@ jobs:
           $version = ($doc.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ } | Select-Object -First 1)
           $build = [long]([DateTime]::UtcNow.ToString("yyyyMMddHHmm"))
           $downloadUrl = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/CommTestTool-${{ github.ref_name }}-win-x64.zip"
-          powershell -ExecutionPolicy Bypass -File .\tools\Generate-UpdateManifest.ps1 -Version $version -Build $build -PackagePath "artifacts\CommTestTool-${{ github.ref_name }}-win-x64.zip" -ManifestPath "artifacts\update-manifest.json" -DownloadUrl $downloadUrl -Notes "Release ${{ github.ref_name }}"
+          powershell -ExecutionPolicy Bypass -File tools/Generate-UpdateManifest.ps1 -Version $version -Build $build -PackagePath "artifacts\CommTestTool-${{ github.ref_name }}-win-x64.zip" -ManifestPath "artifacts\update-manifest.json" -DownloadUrl $downloadUrl -Notes "Release ${{ github.ref_name }}"
 
       - name: Sign update manifest
         shell: pwsh
@@ -41,12 +41,12 @@ jobs:
         run: |
           $keyPath = Join-Path $env:RUNNER_TEMP "update-signing-ed25519.seed"
           [IO.File]::WriteAllText($keyPath, [Text.Encoding]::ASCII.GetString([Convert]::FromBase64String($env:UPDATE_SIGNING_KEY_BASE64)))
-          powershell -ExecutionPolicy Bypass -File .\tools\Sign-UpdateManifest.ps1 -Manifest artifacts\update-manifest.json -Key $keyPath -Out artifacts\update-manifest.signed.json
+          powershell -ExecutionPolicy Bypass -File tools/Sign-UpdateManifest.ps1 -Manifest artifacts\update-manifest.json -Key $keyPath -Out artifacts\update-manifest.signed.json
 
       - name: Verify update manifest
         shell: pwsh
         run: |
-          powershell -ExecutionPolicy Bypass -File .\tools\Verify-UpdateManifest.ps1 -Manifest artifacts\update-manifest.signed.json -PublicKeyBase64 "5Vp7fPpSrbX0KEJMlnRh2YYzIclyim6UQtXYfvll3Dc="
+          powershell -ExecutionPolicy Bypass -File tools/Verify-UpdateManifest.ps1 -Manifest artifacts\update-manifest.signed.json -PublicKeyBase64 "5Vp7fPpSrbX0KEJMlnRh2YYzIclyim6UQtXYfvll3Dc="
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
