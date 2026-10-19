@@ -26,9 +26,10 @@ jobs:
       - name: Generate update manifest
         shell: pwsh
         run: |
-          [xml]$props = Get-Content Directory.Build.props
-          $version = $props.Project.PropertyGroup.Version
-          $build = $props.Project.PropertyGroup.AssemblyVersion.Split('.')[-1]
+          $doc = New-Object System.Xml.XmlDocument
+          $doc.Load("Directory.Build.props")
+          $version = ($doc.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ } | Select-Object -First 1)
+          $build = [long]([DateTime]::UtcNow.ToString("yyyyMMddHHmm"))
           $downloadUrl = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/CommTestTool-${{ github.ref_name }}-win-x64.zip"
           .\tools\Generate-UpdateManifest.ps1 -Version $version -Build $build -PackagePath "artifacts\CommTestTool-${{ github.ref_name }}-win-x64.zip" -ManifestPath "artifacts\update-manifest.json" -DownloadUrl $downloadUrl -Notes "Release ${{ github.ref_name }}"
 
