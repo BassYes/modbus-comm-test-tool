@@ -171,11 +171,17 @@ public sealed class UpdateService : IUpdateService
         var updateDir = Path.Combine(AppPaths.DataDirectory, "updates");
         Directory.CreateDirectory(updateDir);
         var packagePath = Path.Combine(updateDir, SanitizeFileName(manifest.FileName));
+        var partPath = packagePath + ".part";
 
-        if (File.Exists(packagePath))
+        // 上次已经下好的包（比如“应用更新”失败后重试）直接复用，避免把 100 MB+ 再下一遍。
+        if (await TryReuseExistingPackageAsync(packagePath, manifest, progress, cancellationToken).ConfigureAwait(false))
         {
-            File.Delete(packagePath);
+            return packagePath;
         }
+
+        // 先清掉上次失败留下的半成品。删不掉也不影响本次：内容先写到 .part，最后再替换正式文件。
+        await TryDeleteFileAsync(partPath, cancellationToken).ConfigureAwait(false);
+        await TryDeleteFileAsync(packagePath, cancellationToken).ConfigureAwait(false);
 
         using var response = await _http.GetAsync(downloadUri, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
@@ -191,36 +197,41 @@ public sealed class UpdateService : IUpdateService
         }
 
         await using var source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        await using var destination = new FileStream(packagePath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
 
+        var received = 0L;
         var buffer = new byte[81920];
-        long received = 0;
-        int read;
-        while ((read = await source.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
+        await using (var destination = new FileStream(partPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
         {
-            await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-            received += read;
-            if (received > manifest.Size)
+            int read;
+            while ((read = await source.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
             {
-                throw new InvalidOperationException("下载文件超过清单声明大小。");
+                await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                received += read;
+                if (received > manifest.Size)
+                {
+                    throw new InvalidOperationException("下载文件超过清单声明大小。");
+                }
+                progress?.Report(new UpdateDownloadProgress(received, manifest.Size));
             }
-            progress?.Report(new UpdateDownloadProgress(received, manifest.Size));
-        }
 
-        await destination.FlushAsync(cancellationToken).ConfigureAwait(false);
+            await destination.FlushAsync(cancellationToken).ConfigureAwait(false);
+        }
 
         if (received != manifest.Size)
         {
+            await TryDeleteFileAsync(partPath, cancellationToken).ConfigureAwait(false);
             throw new InvalidOperationException($"下载大小不匹配：期望 {manifest.Size}，实际 {received}。");
         }
 
-        var actualHash = await ComputeSha256Async(packagePath, cancellationToken).ConfigureAwait(false);
+        var actualHash = await ComputeSha256Async(partPath, cancellationToken).ConfigureAwait(false);
         if (!string.Equals(actualHash, manifest.Sha256, StringComparison.OrdinalIgnoreCase))
         {
-            try { File.Delete(packagePath); } catch { /* ignore */ }
+            await TryDeleteFileAsync(partPath, cancellationToken).ConfigureAwait(false);
             throw new InvalidOperationException("下载文件 SHA-256 校验失败。");
         }
 
+        // 校验通过才把 .part 换成正式文件名。杀毒软件可能在文件刚写完时短暂独占它，替换时重试几次。
+        await ReplaceFileAsync(partPath, packagePath, cancellationToken).ConfigureAwait(false);
         return packagePath;
     }
 
@@ -453,9 +464,103 @@ public sealed class UpdateService : IUpdateService
 
     private static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
     {
-        await using var stream = File.OpenRead(path);
-        var hash = await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false);
-        return Convert.ToHexString(hash).ToLowerInvariant();
+        // 杀毒软件/搜索索引可能在文件刚写完时短暂独占它：共享读 + 有限重试，避免“文件被占用”直接判下载失败。
+        var lastError = default(Exception);
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            try
+            {
+                await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 81920, useAsync: true);
+                var hash = await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false);
+                return Convert.ToHexString(hash).ToLowerInvariant();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                lastError = ex;
+                await Task.Delay(200 * (attempt + 1), cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        throw new InvalidOperationException(
+            "更新包校验失败：文件正被其他程序占用（常见于杀毒软件扫描），请稍后重试。", lastError);
+    }
+
+    /// <summary>已有完整且 SHA 匹配的包时直接复用（避免重复下载 100 MB+）。</summary>
+    private static async Task<bool> TryReuseExistingPackageAsync(
+        string packagePath,
+        UpdateManifest manifest,
+        IProgress<UpdateDownloadProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var file = new FileInfo(packagePath);
+            if (!file.Exists || file.Length != manifest.Size)
+            {
+                return false;
+            }
+
+            var hash = await ComputeSha256Async(packagePath, cancellationToken).ConfigureAwait(false);
+            if (!string.Equals(hash, manifest.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            progress?.Report(new UpdateDownloadProgress(manifest.Size, manifest.Size));
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>删除文件；删不掉（被占用 / 无权限）时只重试几次，不抛异常。</summary>
+    private static async Task TryDeleteFileAsync(string path, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            try
+            {
+                File.Delete(path);
+                return;
+            }
+            catch (IOException)
+            {
+                await Task.Delay(150, cancellationToken).ConfigureAwait(false);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                await Task.Delay(150, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>把下载好的 .part 替换成正式包名；被杀毒软件短暂占用时重试。</summary>
+    private static async Task ReplaceFileAsync(string sourcePath, string targetPath, CancellationToken cancellationToken)
+    {
+        var lastError = default(Exception);
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            try
+            {
+                File.Move(sourcePath, targetPath, overwrite: true);
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                lastError = ex;
+                await Task.Delay(200 * (attempt + 1), cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        throw new InvalidOperationException(
+            "更新包保存失败：目标文件正被其他程序占用（常见于杀毒软件扫描），请稍后重试。", lastError);
     }
 
     private static byte[] CanonicalManifestBytes(UpdateManifest manifest)
