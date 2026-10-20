@@ -253,9 +253,29 @@ public sealed class UpdateService : IUpdateService
         }
 
         var targetDir = Path.GetDirectoryName(targetExe)!;
-        var stagingHelper = Path.Combine(Path.GetTempPath(), "CommTestTool-update-helper-" + Guid.NewGuid().ToString("N"), "Comm.UpdateHelper.exe");
-        Directory.CreateDirectory(Path.GetDirectoryName(stagingHelper)!);
-        File.Copy(helperPath, stagingHelper, overwrite: true);
+
+        // 更新助手可能是“exe + 依赖 dll”的多文件发布：把整个 helper 目录一起搬到临时目录再启动，
+        // 避免只复制 exe 导致缺 deps.json / runtimeconfig.json 而起不来。
+        var helperDirectory = Path.GetDirectoryName(Path.GetFullPath(helperPath))!;
+        var stagingDirectory = Path.Combine(Path.GetTempPath(), "CommTestTool-update-helper-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(stagingDirectory);
+
+        var baseDirectory = Path.GetFullPath(AppContext.BaseDirectory).TrimEnd(Path.DirectorySeparatorChar);
+        if (string.Equals(Path.GetFullPath(helperDirectory).TrimEnd(Path.DirectorySeparatorChar), baseDirectory,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            // 兼容旧的“程序根目录放单文件助手”布局：只复制 exe。
+            File.Copy(helperPath, Path.Combine(stagingDirectory, Path.GetFileName(helperPath)), overwrite: true);
+        }
+        else
+        {
+            foreach (var file in Directory.EnumerateFiles(helperDirectory, "*", SearchOption.TopDirectoryOnly))
+            {
+                File.Copy(file, Path.Combine(stagingDirectory, Path.GetFileName(file)), overwrite: true);
+            }
+        }
+
+        var stagingHelper = Path.Combine(stagingDirectory, Path.GetFileName(helperPath));
 
         var currentPid = Environment.ProcessId;
         var startInfo = new System.Diagnostics.ProcessStartInfo
@@ -280,8 +300,10 @@ public sealed class UpdateService : IUpdateService
         var baseDir = AppContext.BaseDirectory;
         var candidates = new[]
         {
-            Path.Combine(baseDir, "Comm.UpdateHelper.exe"),
+            // 发布包里的标准位置（Publish-App.ps1 输出到 helper\update\）
+            Path.Combine(baseDir, "helper", "update", "Comm.UpdateHelper.exe"),
             Path.Combine(baseDir, "helper", "Comm.UpdateHelper.exe"),
+            Path.Combine(baseDir, "Comm.UpdateHelper.exe"),
             Path.Combine(baseDir, "..", "Comm.UpdateHelper", "bin", "Debug", "net8.0-windows", "Comm.UpdateHelper.exe"),
             Path.Combine(baseDir, "..", "..", "..", "tools", "Comm.UpdateHelper", "bin", "Debug", "net8.0-windows", "Comm.UpdateHelper.exe")
         };

@@ -12,7 +12,8 @@
       4. 可选地打成 zip（注意：zip 经网盘/微信传输后，解压出来的 exe 会重新带上标记）；
       5. M3a：把提权助手 Comm.NetConfigHelper 一并发布到 helper\ 子目录（网卡配置写操作需要它，
          未签名时 UAC 会显示"未知发布者"，因此它同样必须纳入签名流水线）；
-      6. M3b：创建空的 plugins\ 目录（插件宿主只加载这里的插件，见 AD-13）。
+      6. M3b：创建空的 plugins\ 目录（插件宿主只加载这里的插件，见 AD-13）；
+      7. 自动更新助手 Comm.UpdateHelper 发布到 helper\update\（“应用更新”功能需要它）。
 
 .PARAMETER Configuration
     默认 Release。
@@ -109,6 +110,25 @@ Write-Host "发布提权助手到: $helperOutput" -ForegroundColor Cyan
 if ($LASTEXITCODE -ne 0) { throw "提权助手发布失败（退出码 $LASTEXITCODE）" }
 
 # ---------------------------------------------------------------------------------------------
+# 自动更新助手：点“应用更新”时由主程序复制到临时目录运行，等主程序退出后替换文件。
+# 缺少它时“应用更新”只会提示“未找到 Comm.UpdateHelper.exe”，因此必须随包发布。
+# 放在 helper\update\，主程序按 UpdateService.FindHelperExecutable 的候选顺序查找。
+# ---------------------------------------------------------------------------------------------
+$updateHelperProject = Join-Path $repoRoot 'tools\Comm.UpdateHelper\Comm.UpdateHelper.csproj'
+$updateHelperOutput  = Join-Path $helperOutput 'update'
+New-Item -ItemType Directory -Path $updateHelperOutput -Force | Out-Null
+
+Write-Host "发布更新助手到: $updateHelperOutput" -ForegroundColor Cyan
+& $dotnet publish $updateHelperProject `
+    -c $Configuration `
+    -r $Runtime `
+    --self-contained:$selfContained `
+    -p:PublishSingleFile=false `
+    -p:DebugType=none `
+    -o $updateHelperOutput
+if ($LASTEXITCODE -ne 0) { throw "更新助手发布失败（退出码 $LASTEXITCODE）" }
+
+# ---------------------------------------------------------------------------------------------
 # M3b：插件受信目录（规划 8.3、AD-13）。默认只创建空目录；-WithSamplePlugin 时装参考示例插件。
 # ---------------------------------------------------------------------------------------------
 $pluginsOutput = Join-Path $OutputPath 'plugins'
@@ -145,7 +165,8 @@ if ($Sign) {
                        'Comm.Session.dll', 'Comm.Scanning.dll', 'Comm.Capture.dll', 'Comm.Network.dll',
                        'Comm.Diagnostics.dll', 'Comm.Settings.dll', 'Comm.Plugins.Abstractions.dll',
                        'Comm.Plugins.Host.dll', 'Comm.Platform.Windows.dll',
-                       'helper\Comm.NetConfigHelper.exe', 'helper\Comm.NetConfigHelper.dll')
+                       'helper\Comm.NetConfigHelper.exe', 'helper\Comm.NetConfigHelper.dll',
+                       'helper\update\Comm.UpdateHelper.exe', 'helper\update\Comm.UpdateHelper.dll')
     $targets = @()
     foreach ($name in $ownAssemblies) {
         $path = Join-Path $OutputPath $name
@@ -175,7 +196,9 @@ $readmeText = @"
    若放在只读目录（如 Program Files），会自动回退到 %LOCALAPPDATA%\通讯测试工具\data。
 5. helper\Comm.NetConfigHelper.exe 是"网卡配置提权助手"：只有在你点击"应用配置"时才会
    通过 UAC 拉起它；它只接受固定的几类命令，不会执行任意命令行。请勿删除该子目录。
-6. plugins\ 是插件受信目录：只把可信插件放进这里；详见 plugins\插件目录说明.txt。
+6. helper\update\Comm.UpdateHelper.exe 是"自动更新助手"：只有在你点击"应用更新"时才会被
+   复制到临时目录运行，等本程序退出后替换程序文件。请勿删除该子目录。
+7. plugins\ 是插件受信目录：只把可信插件放进这里；详见 plugins\插件目录说明.txt。
 "@
 Set-Content -LiteralPath (Join-Path $OutputPath '便携包说明.txt') -Value $readmeText -Encoding UTF8
 
@@ -194,6 +217,7 @@ Write-Host ""
 Write-Host "完成。目录结构：" -ForegroundColor Green
 Write-Host "  $OutputPath\CommTestTool.exe           主程序（普通权限）"
 Write-Host "  $OutputPath\helper\Comm.NetConfigHelper.exe  网卡配置提权助手（按需 UAC）"
+Write-Host "  $OutputPath\helper\update\Comm.UpdateHelper.exe  自动更新助手（“应用更新”时使用）"
 Write-Host "  $OutputPath\plugins\                   插件受信目录"
 Write-Host ""
 Write-Host "顶层产物：" -ForegroundColor Green
