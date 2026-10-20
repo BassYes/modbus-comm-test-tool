@@ -135,99 +135,116 @@
 
         <Grid Grid.Column="1">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <Border Grid.Row="0" BorderBrush="{StaticResource BorderBrushLight}" BorderThickness="1" CornerRadius="3"
-                    Padding="10" Background="White" Margin="0,0,0,8">
-                <StackPanel>
-                    <TextBlock Text="运行环境" Style="{StaticResource SectionHeader}" Margin="0,0,0,6" />
-                    <TextBlock Text="{Binding AboutText}" TextWrapping="Wrap" FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding VersionText}" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding ActiveLogFileText}" TextWrapping="Wrap" Margin="0,6,0,0" />
-                    <TextBlock Text="{Binding LogDirectoryText}" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding DataDirectoryText}" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding CaptureDirectoryText}" TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
-
-            <Border Grid.Row="1" BorderBrush="{StaticResource BorderBrushLight}" BorderThickness="1" CornerRadius="3"
-                    Background="White" Padding="8">
+            <!--
+                右列整体可纵向滚动：各区块自上而下顺序排列，窗口变矮或变窄时只会出现滚动条，
+                不会像原来那样两个 Border 都放在 Row=1 上互相压字。
+            -->
+            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="0" Text="已保存的扫描方案 / 报文模板 / 设备目标（M2 持久化）"
-                               Style="{StaticResource SectionHeader}" />
+                    <!-- 运行环境 -->
+                    <Border Grid.Row="0" BorderBrush="{StaticResource BorderBrushLight}" BorderThickness="1" CornerRadius="3"
+                            Padding="10" Background="White" Margin="0,0,0,8">
+                        <StackPanel>
+                            <TextBlock Text="运行环境" Style="{StaticResource SectionHeader}" Margin="0,0,0,6" />
+                            <TextBlock Text="{Binding AboutText}" TextWrapping="Wrap" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding VersionText}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding ActiveLogFileText}" TextWrapping="Wrap" Margin="0,6,0,0" />
+                            <TextBlock Text="{Binding LogDirectoryText}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding DataDirectoryText}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding CaptureDirectoryText}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
 
-                    <Grid Grid.Row="1">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <ComboBox Grid.Column="0" ItemsSource="{Binding Plans}" DisplayMemberPath="DisplayText"
-                                  SelectedItem="{Binding SelectedPlan}" />
-                        <Button Grid.Column="1" Content="删除方案" Command="{Binding DeletePlanCommand}" />
-                    </Grid>
+                    <!-- 已保存的扫描方案 / 报文模板 / 设备目标 + 最近日志 + 环境自检报告 -->
+                    <Border Grid.Row="1" BorderBrush="{StaticResource BorderBrushLight}" BorderThickness="1" CornerRadius="3"
+                            Background="White" Padding="10" Margin="0,0,0,8">
+                        <StackPanel>
+                            <TextBlock Text="已保存的扫描方案 / 报文模板 / 设备目标（M2 持久化）"
+                                       Style="{StaticResource SectionHeader}" />
 
-                    <Grid Grid.Row="2">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <ComboBox Grid.Column="0" ItemsSource="{Binding Templates}" DisplayMemberPath="DisplayText"
-                                  SelectedItem="{Binding SelectedTemplate}" />
-                        <Button Grid.Column="1" Content="删除模板" Command="{Binding DeleteTemplateCommand}" />
-                    </Grid>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ComboBox Grid.Column="0" ItemsSource="{Binding Plans}" DisplayMemberPath="DisplayText"
+                                          SelectedItem="{Binding SelectedPlan}" />
+                                <Button Grid.Column="1" Content="删除方案" Command="{Binding DeletePlanCommand}"
+                                        VerticalAlignment="Top" />
+                            </Grid>
 
-                    <Grid Grid.Row="3">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <ComboBox Grid.Column="0" ItemsSource="{Binding Targets}" DisplayMemberPath="DisplayText"
-                                  SelectedItem="{Binding SelectedTarget}" />
-                        <Button Grid.Column="1" Content="删除目标" Command="{Binding DeleteTargetCommand}" />
-                    </Grid>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ComboBox Grid.Column="0" ItemsSource="{Binding Templates}" DisplayMemberPath="DisplayText"
+                                          SelectedItem="{Binding SelectedTemplate}" />
+                                <Button Grid.Column="1" Content="删除模板" Command="{Binding DeleteTemplateCommand}"
+                                        VerticalAlignment="Top" />
+                            </Grid>
 
-                    <TextBlock Grid.Row="4" Text="最近日志（内存环形缓冲，始终可用）" Style="{StaticResource SectionHeader}" />
-                    <TextBox Grid.Row="5" Text="{Binding EnvironmentReportText}" IsReadOnly="True"
-                             FontFamily="{StaticResource MonoFont}" FontSize="11"
-                             VerticalScrollBarVisibility="Auto" AcceptsReturn="True"
-                             TextWrapping="NoWrap" HorizontalScrollBarVisibility="Auto" MinHeight="80" />
-                    <TextBox Grid.Row="6" Text="{Binding RingPreview}" IsReadOnly="True" FontFamily="{StaticResource MonoFont}"
-                             FontSize="11" VerticalScrollBarVisibility="Auto" AcceptsReturn="True"
-                             TextWrapping="NoWrap" HorizontalScrollBarVisibility="Auto" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ComboBox Grid.Column="0" ItemsSource="{Binding Targets}" DisplayMemberPath="DisplayText"
+                                          SelectedItem="{Binding SelectedTarget}" />
+                                <Button Grid.Column="1" Content="删除目标" Command="{Binding DeleteTargetCommand}"
+                                        VerticalAlignment="Top" />
+                            </Grid>
+
+                            <TextBlock Text="最近日志（内存环形缓冲，始终可用）" Style="{StaticResource SectionHeader}" />
+                            <TextBox Text="{Binding RingPreview}" IsReadOnly="True"
+                                     FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                     MinHeight="70" MaxHeight="100"
+                                     VerticalScrollBarVisibility="Auto" AcceptsReturn="True"
+                                     TextWrapping="NoWrap" HorizontalScrollBarVisibility="Auto" />
+
+                            <TextBlock Text="环境自检报告（点“环境检查”生成，仅在本机保存，不上传）"
+                                       Style="{StaticResource SectionHeader}" />
+                            <TextBox Text="{Binding EnvironmentReportText}" IsReadOnly="True"
+                                     FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                     MinHeight="70" MaxHeight="100"
+                                     VerticalScrollBarVisibility="Auto" AcceptsReturn="True"
+                                     TextWrapping="NoWrap" HorizontalScrollBarVisibility="Auto" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 软件更新：原来与“已保存的扫描方案”同在 Row=1（叠字），现独立成行、顺序排在最后 -->
+                    <Border Grid.Row="2" Background="White" BorderBrush="#D8D8E0" BorderThickness="1" Padding="10" CornerRadius="4">
+                        <StackPanel>
+                            <TextBlock Text="软件更新（Ed25519 更新清单）" Style="{StaticResource SectionHeader}" />
+                            <TextBlock TextWrapping="Wrap">
+                                <Run Text="当前版本：" />
+                                <Run Text="{Binding VersionText}" FontFamily="{StaticResource MonoFont}" FontSize="11" />
+                            </TextBlock>
+                            <TextBlock Text="{Binding UpdateStatusText}" Margin="0,6,0,0" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding UpdateNotes}" Margin="0,4,0,0" TextWrapping="Wrap" FontSize="11" />
+                            <TextBlock Text="{Binding UpdateProgressText}" Margin="0,4,0,0" TextWrapping="Wrap" FontSize="11" />
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <Button Content="检查更新" Command="{Binding CheckForUpdatesCommand}" Margin="0,0,8,0" />
+                                <Button Content="下载更新" Command="{Binding DownloadUpdateCommand}" Margin="0,0,8,0" />
+                                <Button Content="应用更新" Command="{Binding ApplyUpdateCommand}" />
+                            </StackPanel>
+                            <TextBlock Text="说明：当前默认更新地址为占位地址，发布时需替换为真实 GitHub Release 地址。" Margin="0,8,0,0" Foreground="#4A4A55" FontSize="11" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
                 </Grid>
-            </Border>
+            </ScrollViewer>
 
-            <Border Grid.Row="1" Margin="0,8,0,0" BorderBrush="#D8D8E0" BorderThickness="1" Padding="10" CornerRadius="4">
-                <StackPanel>
-                    <TextBlock Text="软件更新（Ed25519 更新清单）" Style="{StaticResource SectionHeader}" />
-                    <TextBlock Text="当前版本：" />
-                    <TextBlock Text="{Binding VersionText}" FontFamily="{StaticResource MonoFont}" />
-                    <TextBlock Text="{Binding UpdateStatusText}" Margin="0,6,0,0" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding UpdateNotes}" Margin="0,4,0,0" TextWrapping="Wrap" FontSize="11" />
-                    <TextBlock Text="{Binding UpdateProgressText}" Margin="0,4,0,0" TextWrapping="Wrap" FontSize="11" />
-                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                        <Button Content="检查更新" Command="{Binding CheckForUpdatesCommand}" Margin="0,0,8,0" />
-                        <Button Content="下载更新" Command="{Binding DownloadUpdateCommand}" Margin="0,0,8,0" />
-                        <Button Content="应用更新" Command="{Binding ApplyUpdateCommand}" />
-                    </StackPanel>
-                    <TextBlock Text="说明：当前默认更新地址为占位地址，发布时需替换为真实 GitHub Release 地址。" Margin="0,8,0,0" Foreground="#4A4A55" FontSize="11" TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
-
-            <TextBlock Grid.Row="2" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#4A4A55"
+            <TextBlock Grid.Row="1" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="#4A4A55"
                        Text="日志与诊断数据仅保存在本机，程序不会自动上传。需要反馈问题时，请使用“复制诊断信息”或“生成诊断包”。" />
         </Grid>
     </Grid>
