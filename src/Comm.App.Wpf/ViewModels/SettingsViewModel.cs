@@ -69,6 +69,9 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>X-9：“关于”行：版本 + 提交号 + 构建时间。</summary>
     public string AboutText => AppInfo.FullVersionText;
 
+    /// <summary>设置页显示的更新来源：当前实际使用的 GitHub Release 清单直链（只读展示，避免再出现“占位地址”这类过时说明）。</summary>
+    public string UpdateSourceText => $"更新来源：{UpdateService.DefaultManifestUrl}";
+
     [ObservableProperty] private string _dataDirectoryText = string.Empty;
     [ObservableProperty] private string _captureDirectoryText = string.Empty;
     [ObservableProperty] private string _message = string.Empty;

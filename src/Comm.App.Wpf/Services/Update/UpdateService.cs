@@ -17,6 +17,11 @@ namespace Comm.App.Wpf.Services.Update;
 public sealed class UpdateService : IUpdateService
 {
     public const string DefaultPublicKey = "5Vp7fPpSrbX0KEJMlnRh2YYzIclyim6UQtXYfvll3Dc=";
+
+    /// <summary>
+    /// 更新清单地址：指向本仓库最新（Latest）Release 的清单附件，
+    /// 该附件由 .github/workflows/release.yml 在推送 v* 标签时生成并上传。
+    /// </summary>
     public const string DefaultManifestUrl = "https://github.com/BassYes/modbus-comm-test-tool/releases/latest/download/update-manifest.signed.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new()

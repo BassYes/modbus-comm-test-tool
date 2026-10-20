@@ -238,7 +238,7 @@
                                 <Button Content="下载更新" Command="{Binding DownloadUpdateCommand}" Margin="0,0,8,0" />
                                 <Button Content="应用更新" Command="{Binding ApplyUpdateCommand}" />
                             </StackPanel>
-                            <TextBlock Text="说明：当前默认更新地址为占位地址，发布时需替换为真实 GitHub Release 地址。" Margin="0,8,0,0" Foreground="#4A4A55" FontSize="11" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding UpdateSourceText}" Margin="0,8,0,0" Foreground="#4A4A55" FontSize="11" TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
                 </Grid>
