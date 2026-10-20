@@ -67,6 +67,28 @@ public static class AppInfo
     /// <summary>构建时间（UTC，构建时注入）。</summary>
     public static string BuildTimeUtc => Metadata("BuildTimeUtc") ?? "未知";
 
+    /// <summary>
+    /// 构建号（<c>yyyyMMddHHmm</c>，取构建时间 UTC），与更新清单里的 <c>build</c> 同格式。
+    /// 仅用于展示与诊断：“是否有更新”只比版本号（见 UpdateService.IsNewer）。
+    /// </summary>
+    public static long BuildNumber
+    {
+        get
+        {
+            if (!DateTime.TryParse(BuildTimeUtc,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal,
+                    out var time))
+            {
+                return 0;
+            }
+
+            return long.TryParse(time.ToString("yyyyMMddHHmm", System.Globalization.CultureInfo.InvariantCulture), out var build)
+                ? build
+                : 0;
+        }
+    }
+
     /// <summary>构建时的提交号（简短哈希）；非 Git 构建时为 <c>unknown</c>。</summary>
     public static string Commit => Metadata("SourceRevisionId") ?? "unknown";
 

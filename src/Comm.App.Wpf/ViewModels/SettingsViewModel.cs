@@ -13,7 +13,7 @@ namespace Comm.App.Wpf.ViewModels;
 public partial class SettingsViewModel : ObservableObject
 {
     private readonly AppServices _app;
-    private readonly IUpdateService _updateService = new UpdateService(UpdateService.DefaultManifestUrl, UpdateService.DefaultPublicKey, AppInfo.Version, 0);
+    private readonly IUpdateService _updateService = new UpdateService(UpdateService.DefaultManifestUrl, UpdateService.DefaultPublicKey, AppInfo.Version, AppInfo.BuildNumber);
     private UpdateManifest? _updateManifest;
     private string? _updatePackagePath;
 
@@ -107,8 +107,10 @@ public partial class SettingsViewModel : ObservableObject
             var result = await _updateService.CheckForUpdatesAsync();
             IsUpdateAvailable = result.IsUpdateAvailable;
             UpdateStatusText = result.Message;
-            UpdateNotes = result.Manifest?.Notes ?? string.Empty;
-            _updateManifest = result.Manifest;
+            // 只有确实发现新版本时才保留清单：否则“已是最新”下面还会显示上一条 Release 的说明，
+            // 而且“下载更新”会因目标版本不高于当前版本而失败。
+            UpdateNotes = result.IsUpdateAvailable ? result.Manifest?.Notes ?? string.Empty : string.Empty;
+            _updateManifest = result.IsUpdateAvailable ? result.Manifest : null;
         }
         catch (Exception ex)
         {

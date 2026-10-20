@@ -406,6 +406,15 @@ public sealed class UpdateService : IUpdateService
         }
     }
 
+    /// <summary>
+    /// 判断清单是否比当前程序更新：<b>只比版本号</b>。
+    /// <para>
+    /// 不能用 <see cref="UpdateManifest.Build"/> 比较：清单里的 build 是发布流水线“生成清单”的时刻，
+    /// 而程序里的 build 是“编译”时刻；同一版本的清单 build 天生比程序 build 晚，
+    /// 会把“已是最新”误判成“发现新版本 0.4.2”（点下载后又会因版本不高于当前版本而失败）。
+    /// 发版约定见 Directory.Build.props / .github/workflows/release.yml：每次发布递增版本号。
+    /// </para>
+    /// </summary>
     private bool IsNewer(UpdateManifest manifest)
     {
         if (!Version.TryParse(CurrentVersion, out var current))
@@ -417,10 +426,7 @@ public sealed class UpdateService : IUpdateService
             return false;
         }
 
-        var cmp = latest.CompareTo(current);
-        if (cmp > 0) return true;
-        if (cmp < 0) return false;
-        return manifest.Build > CurrentBuild;
+        return latest > current;
     }
 
     private static bool IsAllowedHost(string host)
