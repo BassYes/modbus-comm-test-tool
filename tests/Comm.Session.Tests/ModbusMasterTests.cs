@@ -1,5 +1,7 @@
+using System.Runtime.CompilerServices;
 using Comm.Core.Codecs;
 using Comm.Core.Frames;
+using Comm.Core.Transport;
 using Comm.Protocols.Modbus;
 using Comm.Session;
 using Comm.TestSupport;
@@ -392,5 +394,185 @@ public class ModbusMasterTests
         Assert.Equal(1, session.Statistics.TxCount);
 
         await session.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Cancelled_queued_write_is_never_sent()
+    {
+        var slave = new ModbusSlaveSimulator();
+        var codec = new ModbusRtuCodec();
+        var channel = new GatedFirstWriteChannel(slave.CreateResponder(codec));
+        var observer = new CollectingFrameObserver();
+        var session = new ModbusSession(channel, codec, new SessionOptions
+        {
+            ResponseTimeoutMs = 1000,
+            RetryCount = 0,
+            TurnaroundDelayMs = 1,
+            IsSerial = true,
+            SuppressEcho = false
+        }, observer);
+
+        await session.ConnectAsync();
+        var first = session.ReadAsync(1, DataArea.HoldingRegisters, 0, 1);
+        await channel.FirstWriteStarted.WaitAsync(TimeSpan.FromSeconds(2));
+
+        using var cts = new CancellationTokenSource();
+        var write = session.ExecuteAsync(new ModbusRequest(1, ModbusRequests.WriteSingleRegister(5, 0x1234),
+            Confirmed: true), cts.Token);
+        cts.Cancel();
+        // 这条读取排在已取消的写请求之后；完成时调度器已经处理过取消项。
+        var after = session.ReadAsync(1, DataArea.HoldingRegisters, 1, 1);
+        channel.ReleaseFirstWrite();
+
+        Assert.Equal(ExchangeStatus.Cancelled, (await write).Status);
+        Assert.Equal(ExchangeStatus.Ok, (await first).Status);
+        Assert.Equal(ExchangeStatus.Ok, (await after).Status);
+        Assert.False(slave.HoldingRegisters.ContainsKey(5));
+        Assert.Equal(2, observer.Count(FrameDirection.Tx));
+        Assert.Equal(2, slave.ReceivedRequests.Count);
+
+        await session.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Split_read_response_restores_prefix_when_it_is_not_an_echo()
+    {
+        var slave = new ModbusSlaveSimulator();
+        slave.HoldingRegisters[0] = 0x1234;
+        var codec = new ModbusRtuCodec();
+        var channel = new SplitResponseChannel(slave.CreateResponder(codec));
+        var session = new ModbusSession(channel, codec, new SessionOptions
+        {
+            ResponseTimeoutMs = 300,
+            RetryCount = 0,
+            TurnaroundDelayMs = 1,
+            IsSerial = true,
+            SuppressEcho = true
+        });
+
+        await session.ConnectAsync();
+        var result = await session.ReadAsync(1, DataArea.HoldingRegisters, 0, 1);
+
+        Assert.Equal(ExchangeStatus.Ok, result.Status);
+        Assert.Equal(new ushort[] { 0x1234 }, result.ResponsePdu!.Registers);
+        Assert.Equal(0, session.Statistics.EchoCount);
+
+        await session.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Tcp_raw_adu_matches_response_using_its_mbap_transaction_id()
+    {
+        var slave = new ModbusSlaveSimulator { UnitId = 0x11 };
+        slave.HoldingRegisters[3] = 0x4321;
+        var codec = new ModbusTcpCodec();
+        var channel = new LoopbackChannel(slave.CreateResponder(codec), responseDelayMs: 1);
+        var session = new ModbusSession(channel, codec, new SessionOptions
+        {
+            ResponseTimeoutMs = 300,
+            RetryCount = 0,
+            TurnaroundDelayMs = 1,
+            IsSerial = false,
+            SuppressEcho = false
+        });
+
+        await session.ConnectAsync();
+        var pdu = ModbusRequests.Read(DataArea.HoldingRegisters, 3, 1);
+        var rawAdu = codec.BuildAdu(pdu.ToBytes(), 0x11, transactionId: 0x1234);
+        var result = await session.ExecuteAsync(new ModbusRequest(0x11, pdu, RawAdu: rawAdu));
+
+        Assert.Equal(ExchangeStatus.Ok, result.Status);
+        Assert.Equal(rawAdu, result.Request);
+        Assert.Equal(new ushort[] { 0x4321 }, result.ResponsePdu!.Registers);
+        Assert.Equal(0x1234, (result.Response![0] << 8) | result.Response[1]);
+
+        var next = await session.ReadAsync(0x11, DataArea.HoldingRegisters, 3, 1);
+        Assert.Equal(ExchangeStatus.Ok, next.Status);
+        Assert.Equal(0x1235, (next.Request[0] << 8) | next.Request[1]);
+
+        await session.DisposeAsync();
+    }
+
+    private sealed class SplitResponseChannel : ITransportChannel
+    {
+        private readonly LoopbackChannel _inner;
+
+        public SplitResponseChannel(Func<byte[], byte[]?> responder) =>
+            _inner = new LoopbackChannel(responder, responseDelayMs: 1);
+
+        public string Id => _inner.Id;
+        public TransportKind Kind => _inner.Kind;
+        public string Endpoint => _inner.Endpoint;
+        public ChannelState State => _inner.State;
+        public event EventHandler<ChannelStateChanged>? StateChanged
+        {
+            add => _inner.StateChanged += value;
+            remove => _inner.StateChanged -= value;
+        }
+
+        public Task OpenAsync(CancellationToken cancellationToken = default) => _inner.OpenAsync(cancellationToken);
+        public Task CloseAsync() => _inner.CloseAsync();
+        public ValueTask<TxStamp> WriteAsync(ReadOnlyMemory<byte> data, CancellationToken cancellationToken = default) =>
+            _inner.WriteAsync(data, cancellationToken);
+
+        public async IAsyncEnumerable<RxChunk> ReadAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await foreach (var chunk in _inner.ReadAsync(cancellationToken))
+            {
+                // 确保请求已完成发送并启用回显抑制，然后把响应头与剩余字节分两次交付。
+                await Task.Delay(20, cancellationToken);
+                yield return new RxChunk
+                {
+                    Data = chunk.Data[..2], Timestamp = chunk.Timestamp, MonotonicTicks = chunk.MonotonicTicks
+                };
+                yield return new RxChunk
+                {
+                    Data = chunk.Data[2..], Timestamp = chunk.Timestamp, MonotonicTicks = chunk.MonotonicTicks
+                };
+            }
+        }
+
+        public ValueTask DisposeAsync() => _inner.DisposeAsync();
+    }
+
+    private sealed class GatedFirstWriteChannel : ITransportChannel
+    {
+        private readonly LoopbackChannel _inner;
+        private readonly TaskCompletionSource _firstWriteStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _releaseFirstWrite = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _writeCount;
+
+        public GatedFirstWriteChannel(Func<byte[], byte[]?> responder) =>
+            _inner = new LoopbackChannel(responder, responseDelayMs: 1);
+
+        public Task FirstWriteStarted => _firstWriteStarted.Task;
+        public void ReleaseFirstWrite() => _releaseFirstWrite.TrySetResult();
+        public string Id => _inner.Id;
+        public TransportKind Kind => _inner.Kind;
+        public string Endpoint => _inner.Endpoint;
+        public ChannelState State => _inner.State;
+        public event EventHandler<ChannelStateChanged>? StateChanged
+        {
+            add => _inner.StateChanged += value;
+            remove => _inner.StateChanged -= value;
+        }
+
+        public Task OpenAsync(CancellationToken cancellationToken = default) => _inner.OpenAsync(cancellationToken);
+        public Task CloseAsync() => _inner.CloseAsync();
+
+        public async ValueTask<TxStamp> WriteAsync(ReadOnlyMemory<byte> data, CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Increment(ref _writeCount) == 1)
+            {
+                _firstWriteStarted.TrySetResult();
+                await _releaseFirstWrite.Task.WaitAsync(cancellationToken);
+            }
+            return await _inner.WriteAsync(data, cancellationToken);
+        }
+
+        public IAsyncEnumerable<RxChunk> ReadAsync(CancellationToken cancellationToken = default) =>
+            _inner.ReadAsync(cancellationToken);
+
+        public ValueTask DisposeAsync() => _inner.DisposeAsync();
     }
 }

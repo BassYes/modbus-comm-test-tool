@@ -75,7 +75,30 @@ public sealed class ModbusMaster : IAsyncDisposable
 
     private IFramer? _framer;
 
-    private sealed record PendingRequest(ModbusRequest Request, TaskCompletionSource<ExchangeResult> Completion);
+    private sealed class PendingRequest
+    {
+        private int _state; // 0 = queued, 1 = dispatching, 2 = cancelled before dispatch
+
+        public PendingRequest(ModbusRequest request, TaskCompletionSource<ExchangeResult> completion,
+            CancellationToken cancellationToken)
+        {
+            Request = request;
+            Completion = completion;
+            CancellationToken = cancellationToken;
+        }
+
+        public ModbusRequest Request { get; }
+        public TaskCompletionSource<ExchangeResult> Completion { get; }
+        public CancellationToken CancellationToken { get; }
+
+        public bool TryStart() => Interlocked.CompareExchange(ref _state, 1, 0) == 0;
+
+        public void CancelIfQueued()
+        {
+            if (Interlocked.CompareExchange(ref _state, 2, 0) == 0)
+                Completion.TrySetResult(CancelledResult(Request));
+        }
+    }
 
     private sealed record FrameArrival(byte[] Bytes, FrameCandidate Candidate, DateTimeOffset Timestamp, long MonotonicTicks, long CompletedTicks, long Seq);
 
@@ -160,7 +183,7 @@ public sealed class ModbusMaster : IAsyncDisposable
         }
 
         var completion = new TaskCompletionSource<ExchangeResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var pending = new PendingRequest(request, completion);
+        var pending = new PendingRequest(request, completion, cancellationToken);
 
         await _queues[(int)request.Priority].Writer.WriteAsync(pending, cancellationToken).ConfigureAwait(false);
 
@@ -177,7 +200,7 @@ public sealed class ModbusMaster : IAsyncDisposable
             }
         }
 
-        using var registration = cancellationToken.Register(() => completion.TrySetResult(CancelledResult(request)));
+        using var registration = cancellationToken.Register(pending.CancelIfQueued);
         return await completion.Task.ConfigureAwait(false);
     }
 
@@ -331,10 +354,13 @@ public sealed class ModbusMaster : IAsyncDisposable
                 }
             }
 
+            if (!pending.TryStart()) continue;
+
             ExchangeResult result;
             try
             {
-                result = await ExecuteOneAsync(pending.Request, cancellationToken).ConfigureAwait(false);
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, pending.CancellationToken);
+                result = await ExecuteOneAsync(pending.Request, linked.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -394,7 +420,16 @@ public sealed class ModbusMaster : IAsyncDisposable
                 ? unchecked(++_transactionCounter)
                 : (ushort)0;
 
-            adu = request.RawAdu ?? _codec.BuildAdu(pduBytes, request.UnitId, transaction);
+            adu = request.RawAdu is { Length: > 0 } raw
+                ? raw
+                : _codec.BuildAdu(pduBytes, request.UnitId, transaction);
+
+            // 原始 TCP 报文自带 MBAP 事务号；响应必须按实际发出的事务号匹配。
+            if (_codec.ChecksumLength == 0 && request.RawAdu is { Length: > 0 })
+            {
+                transaction = (ushort)((adu[0] << 8) | adu[1]);
+                _transactionCounter = transaction;
+            }
 
             // 关键顺序：先登记待配对响应，再发送。
             // 否则设备响应很快（或回环/模拟器立即响应）时，响应会在登记之前到达并被丢弃，导致假超时。
@@ -637,10 +672,10 @@ public sealed class ModbusMaster : IAsyncDisposable
                 }
 
                 var chunk = enumerator.Current;
-                int offset = SuppressEcho(chunk);
-                if (offset < chunk.Data.Length)
+                var received = SuppressEcho(chunk);
+                if (received.Length > 0)
                 {
-                    HandleFrames(framer.Feed(chunk.Data.AsSpan(offset), chunk.MonotonicTicks), chunk.Timestamp,
+                    HandleFrames(framer.Feed(received, chunk.MonotonicTicks), chunk.Timestamp,
                         chunk.MonotonicTicks);
                 }
 
@@ -665,11 +700,11 @@ public sealed class ModbusMaster : IAsyncDisposable
 
     /// <summary>
     /// RS-485 半双工回显抑制：把刚发出的帧对应的回显字节从接收流中剔除，
-    /// 返回需要交给成帧器的起始偏移。仅对串口且开启抑制时生效。
+    /// 返回需要交给成帧器的字节。部分匹配最终证实不是回显时，必须恢复先前暂存的前缀。
     /// </summary>
-    private int SuppressEcho(RxChunk chunk)
+    private byte[] SuppressEcho(RxChunk chunk)
     {
-        if (!_options.SuppressEcho || !_options.IsSerial) return 0;
+        if (!_options.SuppressEcho || !_options.IsSerial) return chunk.Data;
 
         byte[]? expected;
         int matched;
@@ -679,7 +714,7 @@ public sealed class ModbusMaster : IAsyncDisposable
             matched = _echoMatched;
         }
 
-        if (expected is null) return 0;
+        if (expected is null) return chunk.Data;
 
         int offset = 0;
         while (offset < chunk.Data.Length && matched < expected.Length && chunk.Data[offset] == expected[matched])
@@ -701,23 +736,27 @@ public sealed class ModbusMaster : IAsyncDisposable
                 _echoExpected = null;
                 _echoMatched = 0;
             }
-            return offset;
+            return chunk.Data[offset..];
         }
 
         if (offset < chunk.Data.Length)
         {
-            // 中途不匹配：本机没有回显现象，取消抑制，全部字节按真实数据交给成帧器。
+            // 中途不匹配：之前暂存的字节也属于真实响应，不能只投递当前块。
             lock (_sync)
             {
                 _echoExpected = null;
                 _echoMatched = 0;
             }
-            return 0;
+            if (matched == 0) return chunk.Data;
+            var restored = new byte[matched + chunk.Data.Length - offset];
+            expected.AsSpan(0, matched).CopyTo(restored);
+            chunk.Data.AsSpan(offset).CopyTo(restored.AsSpan(matched));
+            return restored;
         }
 
         // 块内字节恰好用尽但尚未匹配完：回显可能被拆分成多块，保留进度，本块不投递。
         lock (_sync) _echoMatched = matched;
-        return chunk.Data.Length;
+        return Array.Empty<byte>();
     }
 
     private void HandleFrames(IReadOnlyList<FrameCandidate> frames, DateTimeOffset? timestamp = null,
